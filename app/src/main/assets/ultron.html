@@ -24,4 +24,4 @@ function toggleTts(){ttsOn=!ttsOn;document.getElementById("ttsButton").textConte
 function saveConnection(){UltronAndroid.saveConnection(document.getElementById("baseUrl").value,document.getElementById("token").value)}
 function connectionState(t){document.getElementById("connState").textContent="Connection settings: "+t}
 const messageInput=document.getElementById("message");messageInput.disabled=false;messageInput.readOnly=false;messageInput.addEventListener("click",()=>messageInput.focus());messageInput.addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();sendMessage()}})
-window.addEventListener("load",()=>{try{document.getElementById("baseUrl").value=UltronAndroid.getBaseUrl()}catch(e){}});</script></body></html>
+window.addEventListener("load",()=>{try{const saved=UltronAndroid.getBaseUrl();document.getElementById("baseUrl").value=saved;if(saved){document.getElementById("connState").textContent="PC connection saved: "+saved}}catch(e){}});</script></body></html>
