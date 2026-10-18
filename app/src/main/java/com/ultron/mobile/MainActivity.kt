@@ -27,7 +27,20 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
  override fun onCreate(b: Bundle?) { super.onCreate(b); tts=TextToSpeech(this,this)
   web=WebView(this).apply { setBackgroundColor(android.graphics.Color.BLACK); settings.javaScriptEnabled=true; settings.domStorageEnabled=true; webViewClient=WebViewClient(); webChromeClient=WebChromeClient(); addJavascriptInterface(Bridge(),"UltronAndroid"); loadUrl("file:///android_asset/ultron.html") }; setContentView(web)
  }
- override fun onInit(status:Int){ if(status==TextToSpeech.SUCCESS) tts?.language=Locale.getDefault() }
+ override fun onInit(status:Int){
+  if(status==TextToSpeech.SUCCESS){
+   tts?.language=Locale.US
+   // ULTRON-inspired delivery: deeper, slower and controlled.
+   // This is intentionally not an imitation of any specific actor.
+   tts?.setPitch(0.72f)
+   tts?.setSpeechRate(0.86f)
+   val bestVoice=tts?.voices?.filter { v ->
+    val l=v.locale
+    l.language==Locale.ENGLISH.language && !v.isNetworkConnectionRequired
+   }?.sortedWith(compareBy({ it.quality }, { it.latency }))?.lastOrNull()
+   if(bestVoice!=null) tts?.voice=bestVoice
+  }
+ }
  private fun js(fn:String,v:String){ val q=JSONObject.quote(v); runOnUiThread{web.evaluateJavascript("$fn($q)",null)} }
  private fun listen(){
   if(ContextCompat.checkSelfPermission(this,Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){ActivityCompat.requestPermissions(this,arrayOf(Manifest.permission.RECORD_AUDIO),40);return}
@@ -43,7 +56,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
  }
  inner class Bridge{
   @JavascriptInterface fun startVoice()=runOnUiThread{listen()}
-  @JavascriptInterface fun speak(text:String)=runOnUiThread{tts?.speak(text,TextToSpeech.QUEUE_FLUSH,null,"ultron")}
+  @JavascriptInterface fun speak(text:String)=runOnUiThread{tts?.stop();tts?.setPitch(0.72f);tts?.setSpeechRate(0.86f);tts?.speak(text,TextToSpeech.QUEUE_FLUSH,null,"ultron")}
   @JavascriptInterface fun saveConnection(base:String,token:String){prefs.edit().putString("base",base.trim().trimEnd('/')).putString("token",token.trim()).apply();js("connectionState","SAVED")}
   @JavascriptInterface fun getBaseUrl():String=prefs.getString("base","")?:""
   @JavascriptInterface fun sendMessage(message:String){val base=prefs.getString("base","")?.trim()?.trimEnd('/').orEmpty();val token=prefs.getString("token","")?.trim().orEmpty();if(base.isBlank()){js("receiveError","Set the PC address first.");return}
