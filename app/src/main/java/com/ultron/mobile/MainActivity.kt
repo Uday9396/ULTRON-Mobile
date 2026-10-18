@@ -15,6 +15,8 @@ import androidx.core.content.ContextCompat
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.Inet4Address
+import java.net.NetworkInterface
 import java.util.Locale
 import kotlin.concurrent.thread
 
@@ -24,6 +26,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
  private var recognizer: SpeechRecognizer? = null
  private val prefs by lazy { getSharedPreferences("ultron_mobile", Context.MODE_PRIVATE) }
  private val defaultPcBase = "http://10.174.189.167:5000"
+ @Volatile private var discoveredPcBase: String? = null
 
  @SuppressLint("SetJavaScriptEnabled")
  override fun onCreate(b: Bundle?) { super.onCreate(b); tts=TextToSpeech(this,this)
@@ -51,6 +54,51 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
   }
  }
  private fun js(fn:String,v:String){ val q=JSONObject.quote(v); runOnUiThread{web.evaluateJavascript("$fn($q)",null)} }
+ private fun candidateBases(): List<String> {
+  val out=linkedSetOf<String>()
+  prefs.getString("base","")?.trim()?.trimEnd('/')?.takeIf{it.isNotBlank()}?.let{out.add(it)}
+  discoveredPcBase?.let{out.add(it)}
+  out.add(defaultPcBase)
+  try{
+   val ifaces=NetworkInterface.getNetworkInterfaces()
+   while(ifaces.hasMoreElements()){
+    val ni=ifaces.nextElement()
+    if(!ni.isUp||ni.isLoopback) continue
+    val addrs=ni.inetAddresses
+    while(addrs.hasMoreElements()){
+     val a=addrs.nextElement()
+     if(a is Inet4Address && !a.isLoopbackAddress){
+      val b=a.address
+      val prefix="${b[0].toInt() and 255}.${b[1].toInt() and 255}.${b[2].toInt() and 255}."
+      for(i in 1..254) out.add("http://$prefix$i:5000")
+     }
+    }
+   }
+  }catch(_:Exception){}
+  return out.toList()
+ }
+ private fun tryChat(base:String,token:String,message:String):String?{
+  return try{
+   val c=URL("${base.trimEnd('/')}/api/chat").openConnection() as HttpURLConnection
+   c.requestMethod="POST";c.connectTimeout=350;c.readTimeout=120000;c.doOutput=true
+   c.setRequestProperty("Content-Type","application/json")
+   if(token.isNotBlank())c.setRequestProperty("X-ULTRON-APP-TOKEN",token)
+   c.outputStream.use{it.write(JSONObject().put("message",message).toString().toByteArray())}
+   val code=c.responseCode
+   val s=if(code in 200..299)c.inputStream else c.errorStream
+   val raw=s?.bufferedReader()?.use{it.readText()}.orEmpty()
+   c.disconnect()
+   if(code in 200..299){
+    val j=JSONObject(raw)
+    if(j.optBoolean("ok")){
+     discoveredPcBase=base
+     prefs.edit().putString("base",base).apply()
+     js("connectionState","AUTO-CONNECTED: $base")
+     j.optString("response")
+    }else null
+   }else null
+  }catch(_:Exception){null}
+ }
  private fun listen(){
   if(ContextCompat.checkSelfPermission(this,Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){ActivityCompat.requestPermissions(this,arrayOf(Manifest.permission.RECORD_AUDIO),40);return}
   recognizer?.destroy(); recognizer=SpeechRecognizer.createSpeechRecognizer(this).also{sr->
@@ -68,8 +116,17 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
   @JavascriptInterface fun speak(text:String)=runOnUiThread{tts?.stop();tts?.setPitch(0.62f);tts?.setSpeechRate(0.82f);tts?.speak(text,TextToSpeech.QUEUE_FLUSH,null,"ultron")}
   @JavascriptInterface fun saveConnection(base:String,token:String){prefs.edit().putString("base",base.trim().trimEnd('/')).putString("token",token.trim()).apply();js("connectionState","SAVED")}
   @JavascriptInterface fun getBaseUrl():String=prefs.getString("base",defaultPcBase)?:defaultPcBase
-  @JavascriptInterface fun sendMessage(message:String){val base=prefs.getString("base",defaultPcBase)?.trim()?.trimEnd('/').orEmpty();val token=prefs.getString("token","")?.trim().orEmpty();if(base.isBlank()){js("receiveError","Set the PC address first.");return}
-   thread{try{val c=URL("$base/api/chat").openConnection() as HttpURLConnection;c.requestMethod="POST";c.connectTimeout=10000;c.readTimeout=120000;c.doOutput=true;c.setRequestProperty("Content-Type","application/json");if(token.isNotBlank())c.setRequestProperty("X-ULTRON-APP-TOKEN",token);val body=JSONObject().put("message",message).toString();c.outputStream.use{it.write(body.toByteArray())};val s=if(c.responseCode in 200..299)c.inputStream else c.errorStream;val j=JSONObject(s.bufferedReader().use{it.readText()});if(c.responseCode in 200..299&&j.optBoolean("ok"))js("receiveUltron",j.optString("response")) else js("receiveError",j.optString("error","ULTRON core rejected the request."));c.disconnect()}catch(ex:Exception){js("receiveError","Connection failed: "+ex.javaClass.simpleName)}}
+  @JavascriptInterface fun sendMessage(message:String){
+   val token=prefs.getString("token","")?.trim().orEmpty()
+   thread{
+    js("connectionState","SEARCHING FOR ULTRON CORE...")
+    var answer:String?=null
+    for(base in candidateBases()){
+     answer=tryChat(base,token,message)
+     if(answer!=null)break
+    }
+    if(answer!=null)js("receiveUltron",answer!!) else js("receiveError","ULTRON core not found on this Wi-Fi.")
+   }
   }
  }
  override fun onDestroy(){recognizer?.destroy();tts?.stop();tts?.shutdown();web.destroy();super.onDestroy()}
