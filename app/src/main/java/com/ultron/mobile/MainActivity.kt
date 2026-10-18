@@ -84,7 +84,7 @@ class MainActivity : AppCompatActivity() {
  }
  inner class Bridge{
   @JavascriptInterface fun startVoice()=runOnUiThread{listen()}
-  @JavascriptInterface fun openCamera()=runOnUiThread{openCamera()}
+  @JavascriptInterface fun openCamera()=runOnUiThread{this@MainActivity.openCamera()}
   @JavascriptInterface fun toggleFlashlight()=runOnUiThread{toggleTorch()}
   @JavascriptInterface fun speak(text:String){
    val base=prefs.getString("base",defaultPcBase)?.trim()?.trimEnd('/').orEmpty()
@@ -96,7 +96,7 @@ class MainActivity : AppCompatActivity() {
      val encoded=java.net.URLEncoder.encode(text,"UTF-8")
      val url="$base/api/tts?text=$encoded"
      player=MediaPlayer().apply{
-      setDataSource(url, mapOf("X-ULTRON-APP-TOKEN" to token))
+      setDataSource(this@MainActivity, android.net.Uri.parse(url), mapOf("X-ULTRON-APP-TOKEN" to token))
       setOnPreparedListener{it.start()}
       setOnCompletionListener{it.release(); if(player===it) player=null}
       setOnErrorListener{mp,_,_->mp.release(); if(player===mp) player=null; true}
