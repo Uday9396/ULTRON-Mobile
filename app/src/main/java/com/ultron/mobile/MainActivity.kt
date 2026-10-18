@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.os.Bundle
 import android.speech.*
 import android.speech.tts.TextToSpeech
+import android.speech.tts.Voice
 import android.webkit.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -34,11 +35,18 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
    // This is intentionally not an imitation of any specific actor.
    tts?.setPitch(0.72f)
    tts?.setSpeechRate(0.86f)
-   val bestVoice=tts?.voices?.filter { v ->
+   val candidates=tts?.voices?.filter { v ->
     val l=v.locale
     l.language==Locale.ENGLISH.language && !v.isNetworkConnectionRequired
-   }?.sortedWith(compareBy({ it.quality }, { it.latency }))?.lastOrNull()
-   if(bestVoice!=null) tts?.voice=bestVoice
+   }.orEmpty()
+   // Prefer voices whose engine metadata suggests a male/deep profile.
+   // If Android does not expose such a label, keep the engine's default English voice
+   // rather than randomly selecting a high-pitched voice.
+   val preferred=candidates.firstOrNull { v ->
+    val n=v.name.lowercase(Locale.ROOT)
+    n.contains("male") || n.contains("deep") || n.contains("low")
+   }
+   if(preferred!=null) tts?.voice=preferred
   }
  }
  private fun js(fn:String,v:String){ val q=JSONObject.quote(v); runOnUiThread{web.evaluateJavascript("$fn($q)",null)} }
@@ -56,7 +64,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
  }
  inner class Bridge{
   @JavascriptInterface fun startVoice()=runOnUiThread{listen()}
-  @JavascriptInterface fun speak(text:String)=runOnUiThread{tts?.stop();tts?.setPitch(0.72f);tts?.setSpeechRate(0.86f);tts?.speak(text,TextToSpeech.QUEUE_FLUSH,null,"ultron")}
+  @JavascriptInterface fun speak(text:String)=runOnUiThread{tts?.stop();tts?.setPitch(0.62f);tts?.setSpeechRate(0.82f);tts?.speak(text,TextToSpeech.QUEUE_FLUSH,null,"ultron")}
   @JavascriptInterface fun saveConnection(base:String,token:String){prefs.edit().putString("base",base.trim().trimEnd('/')).putString("token",token.trim()).apply();js("connectionState","SAVED")}
   @JavascriptInterface fun getBaseUrl():String=prefs.getString("base","")?:""
   @JavascriptInterface fun sendMessage(message:String){val base=prefs.getString("base","")?.trim()?.trimEnd('/').orEmpty();val token=prefs.getString("token","")?.trim().orEmpty();if(base.isBlank()){js("receiveError","Set the PC address first.");return}
