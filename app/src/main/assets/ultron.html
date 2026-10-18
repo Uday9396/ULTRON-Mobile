@@ -7,12 +7,12 @@
 <header><h1>ULTRON</h1><div class="online">● SYSTEM ONLINE</div></header>
 <div class="quick"><button id="voiceButton" onclick="startVoice()">🎙 VOICE</button><button onclick="openCamera()">📷 CAMERA</button><button id="flashButton" onclick="toggleFlashlight()">🔦 OFF</button></div>
 <div class="core-area"><div class="core"><div class="core-inner"></div></div></div>
-<section id="morePanel" class="more"><div class="settings"><input id="baseUrl" placeholder="PC core address"><input id="token" type="password" placeholder="App token"><button onclick="saveConnection()">SAVE</button></div><div class="small" id="connState">PC settings stay hidden here.</div><div class="settings" style="margin-top:8px"><button id="ttsButton" onclick="toggleTts()">🔊 TTS: ON</button></div></section>
+<section id="morePanel" class="more"><div class="settings"><input id="baseUrl" placeholder="PC core address"><input id="token" type="password" placeholder="App token"><button onclick="saveConnection()">SAVE</button></div><div class="small" id="connState">PC settings stay hidden here.</div></section>
 <button class="moreButton" onclick="toggleMore()">⋯ MORE</button>
 <div class="composer"><input id="homeMessage" type="text" enterkeyhint="send" placeholder="Message ULTRON..." autocomplete="off"><button onclick="sendFromHome()">SEND</button></div>
 </section>
 <section id="chatScreen" class="chatScreen">
-<div class="chatTop"><button class="back" onclick="closeChat()">←</button><div class="chatTitle">ULTRON // CHAT</div></div>
+<div class="chatTop"><button class="back" onclick="closeChat()">←</button><div class="chatTitle">ULTRON // CHAT</div><button id="ttsButton" onclick="toggleTts()" style="margin-left:auto;padding:0 10px;height:38px">🔊 TTS: ON</button></div>
 <div id="chat" class="chat"><p><strong class="ultron-name">ULTRON:</strong> Awaiting instructions.</p></div>
 <div class="composer"><input id="chatMessage" type="text" enterkeyhint="send" placeholder="Message ULTRON..." autocomplete="off"><button onclick="sendFromChat()">SEND</button></div>
 </section>
