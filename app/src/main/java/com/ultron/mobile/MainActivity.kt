@@ -9,7 +9,7 @@ import android.hardware.camera2.CameraManager
 import android.provider.MediaStore
 import android.os.Bundle
 import android.speech.*
-import android.media.MediaPlayer
+import android.speech.tts.TextToSpeech
 import android.webkit.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -20,9 +20,9 @@ import java.net.URL
 import java.util.Locale
 import kotlin.concurrent.thread
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
  private lateinit var web: WebView
- private var player: MediaPlayer? = null
+ private var tts: TextToSpeech? = null
  private var recognizer: SpeechRecognizer? = null
  private var torchOn = false
  private val prefs by lazy { getSharedPreferences("ultron_mobile", Context.MODE_PRIVATE) }
@@ -30,6 +30,7 @@ class MainActivity : AppCompatActivity() {
 
  @SuppressLint("SetJavaScriptEnabled")
  override fun onCreate(b: Bundle?) { super.onCreate(b)
+  tts=TextToSpeech(this,this)
   web=WebView(this).apply { setBackgroundColor(android.graphics.Color.BLACK); settings.javaScriptEnabled=true; settings.domStorageEnabled=true; webViewClient=WebViewClient(); webChromeClient=WebChromeClient(); addJavascriptInterface(Bridge(),"UltronAndroid"); loadUrl("file:///android_asset/ultron.html") }; setContentView(web)
  }
  private fun js(fn:String,v:String){ val q=JSONObject.quote(v); runOnUiThread{web.evaluateJavascript("$fn($q)",null)} }
@@ -87,23 +88,8 @@ class MainActivity : AppCompatActivity() {
   @JavascriptInterface fun openCamera()=runOnUiThread{this@MainActivity.openCamera()}
   @JavascriptInterface fun toggleFlashlight()=runOnUiThread{toggleTorch()}
   @JavascriptInterface fun speak(text:String){
-   val base=prefs.getString("base",defaultPcBase)?.trim()?.trimEnd('/').orEmpty()
-   val token=prefs.getString("token","")?.trim().orEmpty()
-   if(base.isBlank()||text.isBlank()) return
-   runOnUiThread{
-    try{
-     player?.stop(); player?.release()
-     val encoded=java.net.URLEncoder.encode(text,"UTF-8")
-     val url="$base/api/tts?text=$encoded"
-     player=MediaPlayer().apply{
-      setDataSource(this@MainActivity, android.net.Uri.parse(url), mapOf("X-ULTRON-APP-TOKEN" to token))
-      setOnPreparedListener{it.start()}
-      setOnCompletionListener{it.release(); if(player===it) player=null}
-      setOnErrorListener{mp,_,_->mp.release(); if(player===mp) player=null; true}
-      prepareAsync()
-     }
-    }catch(_:Exception){}
-   }
+   if(text.isBlank()) return
+   runOnUiThread{tts?.speak(text,TextToSpeech.QUEUE_FLUSH,null,"ultron_reply")}
   }
   @JavascriptInterface fun saveConnection(base:String,token:String){prefs.edit().putString("base",base.trim().trimEnd('/')).putString("token",token.trim()).apply();js("connectionState","SAVED")}
   @JavascriptInterface fun getBaseUrl():String=prefs.getString("base",defaultPcBase)?:defaultPcBase
@@ -115,5 +101,12 @@ class MainActivity : AppCompatActivity() {
     if(answer!=null)js("receiveUltron",answer) else js("receiveError","ULTRON core unavailable.")
    }
   } }
- override fun onDestroy(){recognizer?.destroy();player?.stop();player?.release();if(torchOn){try{toggleTorch()}catch(_:Exception){}};web.destroy();super.onDestroy()}
+ override fun onInit(status:Int){
+  if(status==TextToSpeech.SUCCESS){
+   tts?.language=Locale.US
+   tts?.setPitch(0.72f)
+   tts?.setSpeechRate(0.92f)
+  }
+ }
+ override fun onDestroy(){recognizer?.destroy();tts?.stop();tts?.shutdown();if(torchOn){try{toggleTorch()}catch(_:Exception){}};web.destroy();super.onDestroy()}
 }
