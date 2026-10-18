@@ -20,7 +20,12 @@ function sendMessage(){const i=document.getElementById("message"),m=i.value.trim
 let ttsOn=true;
 function receiveUltron(t){document.getElementById("thinking")?.remove();waiting=false;addMessage("ULTRON",t);if(ttsOn)UltronAndroid.speak(t)}
 function receiveError(t){document.getElementById("thinking")?.remove();waiting=false;addMessage("ULTRON",t,"error")}
-function startVoice(){UltronAndroid.startVoice()}\nfunction openCamera(){UltronAndroid.openCamera()}\nfunction toggleFlashlight(){UltronAndroid.toggleFlashlight()}\nfunction flashlightState(t){const b=document.getElementById("flashButton");b.textContent="🔦 "+t;b.classList.toggle("active",t==="ON")}\nfunction cameraState(t){if(t==="CAMERA UNAVAILABLE")addMessage("ULTRON",t,"error")}\nfunction toggleMore(){document.getElementById("morePanel").classList.toggle("open")}
+function startVoice(){UltronAndroid.startVoice()}
+function openCamera(){UltronAndroid.openCamera()}
+function toggleFlashlight(){UltronAndroid.toggleFlashlight()}
+function flashlightState(t){const b=document.getElementById("flashButton");b.textContent="🔦 "+t;b.classList.toggle("active",t==="ON")}
+function cameraState(t){if(t==="CAMERA UNAVAILABLE")addMessage("ULTRON",t,"error")}
+function toggleMore(){document.getElementById("morePanel").classList.toggle("open")}
 function voiceState(t){document.getElementById("voiceButton").textContent="🎙 "+t}
 function voiceResult(t){document.getElementById("voiceButton").textContent="🎙 VOICE";if(t){document.getElementById("message").value=t;sendMessage()}}
 function toggleTts(){ttsOn=!ttsOn;document.getElementById("ttsButton").textContent="🔊 TTS: "+(ttsOn?"ON":"OFF")}
