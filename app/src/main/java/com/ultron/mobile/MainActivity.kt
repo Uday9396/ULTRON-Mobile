@@ -23,6 +23,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
  private var tts: TextToSpeech? = null
  private var recognizer: SpeechRecognizer? = null
  private val prefs by lazy { getSharedPreferences("ultron_mobile", Context.MODE_PRIVATE) }
+ private val defaultPcBase = "http://10.174.189.167:5000"
 
  @SuppressLint("SetJavaScriptEnabled")
  override fun onCreate(b: Bundle?) { super.onCreate(b); tts=TextToSpeech(this,this)
@@ -66,8 +67,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
   @JavascriptInterface fun startVoice()=runOnUiThread{listen()}
   @JavascriptInterface fun speak(text:String)=runOnUiThread{tts?.stop();tts?.setPitch(0.62f);tts?.setSpeechRate(0.82f);tts?.speak(text,TextToSpeech.QUEUE_FLUSH,null,"ultron")}
   @JavascriptInterface fun saveConnection(base:String,token:String){prefs.edit().putString("base",base.trim().trimEnd('/')).putString("token",token.trim()).apply();js("connectionState","SAVED")}
-  @JavascriptInterface fun getBaseUrl():String=prefs.getString("base","")?:""
-  @JavascriptInterface fun sendMessage(message:String){val base=prefs.getString("base","")?.trim()?.trimEnd('/').orEmpty();val token=prefs.getString("token","")?.trim().orEmpty();if(base.isBlank()){js("receiveError","Set the PC address first.");return}
+  @JavascriptInterface fun getBaseUrl():String=prefs.getString("base",defaultPcBase)?:defaultPcBase
+  @JavascriptInterface fun sendMessage(message:String){val base=prefs.getString("base",defaultPcBase)?.trim()?.trimEnd('/').orEmpty();val token=prefs.getString("token","")?.trim().orEmpty();if(base.isBlank()){js("receiveError","Set the PC address first.");return}
    thread{try{val c=URL("$base/api/chat").openConnection() as HttpURLConnection;c.requestMethod="POST";c.connectTimeout=10000;c.readTimeout=120000;c.doOutput=true;c.setRequestProperty("Content-Type","application/json");if(token.isNotBlank())c.setRequestProperty("X-ULTRON-APP-TOKEN",token);val body=JSONObject().put("message",message).toString();c.outputStream.use{it.write(body.toByteArray())};val s=if(c.responseCode in 200..299)c.inputStream else c.errorStream;val j=JSONObject(s.bufferedReader().use{it.readText()});if(c.responseCode in 200..299&&j.optBoolean("ok"))js("receiveUltron",j.optString("response")) else js("receiveError",j.optString("error","ULTRON core rejected the request."));c.disconnect()}catch(ex:Exception){js("receiveError","Connection failed: "+ex.javaClass.simpleName)}}
   }
  }
