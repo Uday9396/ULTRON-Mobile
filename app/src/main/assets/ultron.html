@@ -9,10 +9,19 @@
 <div class="panel"><h2>SYSTEM STATUS</h2><div class="system-row"><span>Discord</span><span class="on">●</span></div><div class="system-row"><span>Ollama</span><span class="on">●</span></div><div class="system-row"><span>Memory</span><span class="on">●</span></div><div class="system-row"><span>Web Intelligence</span><span class="on">●</span></div><div class="system-row"><span>Voice Interface</span><span class="off">○</span></div><div class="system-row"><span>Clap Detection</span><span class="off">○</span></div></div></div>
 <div class="panel messages-panel"><h2>MESSAGES</h2><div id="desktopMessages"><p class="thinking">No incoming calls.</p></div></div>
 <div class="input-area"><input id="message" placeholder="Message ULTRON..." autocomplete="off"><button id="sendButton" onclick="sendMessage()">SEND</button></div>
-<div class="controls"><button>🎙 VOICE</button><button>👏 CLAP</button><button>⚙ STATUS</button><button>🧠 MEMORY</button></div><div class="footer">ULTRON CONTROL INTERFACE // MOBILE SYSTEM</div>
+<div class="panel"><h2>PC CORE CONNECTION</h2><div class="input-area" style="margin:0"><input id="baseUrl" placeholder="http://192.168.x.x:5000"><input id="token" type="password" placeholder="App token"><button onclick="saveConnection()">SAVE</button></div><p id="connState" class="thinking" style="margin-top:8px">Configure once. Token stays on this phone.</p></div><div class="controls"><button id="voiceButton" onclick="startVoice()">🎙 VOICE</button><button id="ttsButton" onclick="toggleTts()">🔊 TTS: ON</button><button>⚙ STATUS</button><button>🧠 MEMORY</button></div><div class="footer">ULTRON CONTROL INTERFACE // MOBILE SYSTEM</div>
 <script>
 let waiting=false;
 function addMessage(name,text,type=""){const c=document.getElementById("chat"),p=document.createElement("p"),s=document.createElement("strong");s.className=name==="ULTRON"?"ultron-name":"user-name";s.textContent=name+": ";p.appendChild(s);p.appendChild(document.createTextNode(text));if(type)p.classList.add(type);c.appendChild(p);c.scrollTop=c.scrollHeight;return p}
-function sendMessage(){const i=document.getElementById("message");const m=i.value.trim();if(!m||waiting)return;addMessage("YOU",m);i.value="";addMessage("ULTRON","Mobile-to-core connection will be enabled in the next build.","thinking")}
+function sendMessage(){const i=document.getElementById("message"),m=i.value.trim();if(!m||waiting)return;addMessage("YOU",m);i.value="";waiting=true;const p=addMessage("ULTRON","Analyzing...","thinking");p.id="thinking";UltronAndroid.sendMessage(m)}
+let ttsOn=true;
+function receiveUltron(t){document.getElementById("thinking")?.remove();waiting=false;addMessage("ULTRON",t);if(ttsOn)UltronAndroid.speak(t)}
+function receiveError(t){document.getElementById("thinking")?.remove();waiting=false;addMessage("ULTRON",t,"error")}
+function startVoice(){UltronAndroid.startVoice()}
+function voiceState(t){document.getElementById("voiceButton").textContent="🎙 "+t}
+function voiceResult(t){document.getElementById("voiceButton").textContent="🎙 VOICE";if(t){document.getElementById("message").value=t;sendMessage()}}
+function toggleTts(){ttsOn=!ttsOn;document.getElementById("ttsButton").textContent="🔊 TTS: "+(ttsOn?"ON":"OFF")}
+function saveConnection(){UltronAndroid.saveConnection(document.getElementById("baseUrl").value,document.getElementById("token").value)}
+function connectionState(t){document.getElementById("connState").textContent="Connection settings: "+t}
 document.getElementById("message").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();sendMessage()}})
-</script></body></html>
+window.addEventListener("load",()=>{try{document.getElementById("baseUrl").value=UltronAndroid.getBaseUrl()}catch(e){}});</script></body></html>
