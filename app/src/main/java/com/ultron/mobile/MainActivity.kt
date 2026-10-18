@@ -26,7 +26,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
  private var recognizer: SpeechRecognizer? = null
  private var torchOn = false
  private val prefs by lazy { getSharedPreferences("ultron_mobile", Context.MODE_PRIVATE) }
- private val defaultPcBase = "http://10.174.189.167:5000"
+ private val defaultPcBase = "http://192.168.0.109:5000"
 
  @SuppressLint("SetJavaScriptEnabled")
  override fun onCreate(b: Bundle?) { super.onCreate(b)
