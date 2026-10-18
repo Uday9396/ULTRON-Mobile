@@ -4,6 +4,9 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CameraManager
+import android.provider.MediaStore
 import android.os.Bundle
 import android.speech.*
 import android.media.MediaPlayer
@@ -21,6 +24,7 @@ class MainActivity : AppCompatActivity() {
  private lateinit var web: WebView
  private var player: MediaPlayer? = null
  private var recognizer: SpeechRecognizer? = null
+ private var torchOn = false
  private val prefs by lazy { getSharedPreferences("ultron_mobile", Context.MODE_PRIVATE) }
  private val defaultPcBase = "http://10.174.189.167:5000"
 
@@ -32,7 +36,7 @@ class MainActivity : AppCompatActivity() {
  private fun tryChat(base:String,token:String,message:String):String?{
   return try{
    val c=URL("${base.trimEnd('/')}/api/chat").openConnection() as HttpURLConnection
-   c.requestMethod="POST";c.connectTimeout=350;c.readTimeout=120000;c.doOutput=true
+   c.requestMethod="POST";c.connectTimeout=5000;c.readTimeout=120000;c.doOutput=true
    c.setRequestProperty("Content-Type","application/json")
    if(token.isNotBlank())c.setRequestProperty("X-ULTRON-APP-TOKEN",token)
    c.outputStream.use{it.write(JSONObject().put("message",message).toString().toByteArray())}
@@ -60,8 +64,28 @@ class MainActivity : AppCompatActivity() {
    sr.startListening(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply{putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);putExtra(RecognizerIntent.EXTRA_LANGUAGE,Locale.getDefault())})
   }
  }
+ private fun openCamera(){
+  try{startActivity(Intent(MediaStore.ACTION_IMAGE_CAPTURE))}catch(_:Exception){js("cameraState","CAMERA UNAVAILABLE")}
+ }
+ private fun toggleTorch(){
+  if(ContextCompat.checkSelfPermission(this,Manifest.permission.CAMERA)!=PackageManager.PERMISSION_GRANTED){
+   ActivityCompat.requestPermissions(this,arrayOf(Manifest.permission.CAMERA),41); return
+  }
+  try{
+   val manager=getSystemService(Context.CAMERA_SERVICE) as CameraManager
+   val cameraId=manager.cameraIdList.firstOrNull{id->
+    val c=manager.getCameraCharacteristics(id)
+    c.get(CameraCharacteristics.FLASH_INFO_AVAILABLE)==true && c.get(CameraCharacteristics.LENS_FACING)==CameraCharacteristics.LENS_FACING_BACK
+   } ?: run{js("flashlightState","UNAVAILABLE");return}
+   torchOn=!torchOn
+   manager.setTorchMode(cameraId,torchOn)
+   js("flashlightState",if(torchOn)"ON" else "OFF")
+  }catch(_:Exception){torchOn=false;js("flashlightState","UNAVAILABLE")}
+ }
  inner class Bridge{
   @JavascriptInterface fun startVoice()=runOnUiThread{listen()}
+  @JavascriptInterface fun openCamera()=runOnUiThread{openCamera()}
+  @JavascriptInterface fun toggleFlashlight()=runOnUiThread{toggleTorch()}
   @JavascriptInterface fun speak(text:String){
    val base=prefs.getString("base",defaultPcBase)?.trim()?.trimEnd('/').orEmpty()
    val token=prefs.getString("token","")?.trim().orEmpty()
@@ -91,5 +115,5 @@ class MainActivity : AppCompatActivity() {
     if(answer!=null)js("receiveUltron",answer) else js("receiveError","ULTRON core unavailable.")
    }
   } }
- override fun onDestroy(){recognizer?.destroy();player?.stop();player?.release();web.destroy();super.onDestroy()}
+ override fun onDestroy(){recognizer?.destroy();player?.stop();player?.release();if(torchOn){try{toggleTorch()}catch(_:Exception){}};web.destroy();super.onDestroy()}
 }
