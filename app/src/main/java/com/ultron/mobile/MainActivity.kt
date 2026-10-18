@@ -91,6 +91,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
    if(text.isBlank()) return
    runOnUiThread{tts?.speak(text,TextToSpeech.QUEUE_FLUSH,null,"ultron_reply")}
   }
+  @JavascriptInterface fun stopSpeaking()=runOnUiThread{tts?.stop()}
   @JavascriptInterface fun saveConnection(base:String,token:String){prefs.edit().putString("base",base.trim().trimEnd('/')).putString("token",token.trim()).apply();js("connectionState","SAVED")}
   @JavascriptInterface fun getBaseUrl():String=prefs.getString("base",defaultPcBase)?:defaultPcBase
   @JavascriptInterface fun sendMessage(message:String){
