@@ -7,6 +7,8 @@ import android.content.pm.PackageManager
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
 import android.provider.MediaStore
+import android.provider.AlarmClock
+import android.provider.ContactsContract
 import android.content.ActivityNotFoundException
 import android.net.Uri
 import android.os.Bundle
@@ -163,8 +165,62 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
    "Searching for $q."
   }catch(_:ActivityNotFoundException){"I couldn't open a browser."}
  }
+ private fun callContactOrNumber(target:String):String{
+  val who=target.trim()
+  if(who.isBlank())return "Tell me who to call."
+  val digits=who.filter{it.isDigit() || it=='+'}
+  var number=if(digits.count{it.isDigit()}>=5)digits else ""
+  if(number.isBlank() && ContextCompat.checkSelfPermission(this,Manifest.permission.READ_CONTACTS)==PackageManager.PERMISSION_GRANTED){
+   contentResolver.query(ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+    arrayOf(ContactsContract.CommonDataKinds.Phone.NUMBER,ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME),
+    ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME+" LIKE ?",arrayOf("%$who%"),null)?.use{cur->
+     if(cur.moveToFirst())number=cur.getString(0)
+   }
+  }
+  if(number.isBlank()){
+   if(ContextCompat.checkSelfPermission(this,Manifest.permission.READ_CONTACTS)!=PackageManager.PERMISSION_GRANTED){
+    ActivityCompat.requestPermissions(this,arrayOf(Manifest.permission.READ_CONTACTS),42)
+    return "Allow Contacts permission, then say call $who again."
+   }
+   return "I couldn't find $who in your contacts."
+  }
+  return try{
+   runOnUiThread{startActivity(Intent(Intent.ACTION_DIAL,Uri.parse("tel:"+Uri.encode(number))))}
+   "Opening the dialer for $who."
+  }catch(_:Exception){"I couldn't open the dialer."}
+ }
+ private fun setAlarm(hour:Int,minute:Int,label:String="ULTRON"):String{
+  return try{
+   val i=Intent(AlarmClock.ACTION_SET_ALARM).putExtra(AlarmClock.EXTRA_HOUR,hour).putExtra(AlarmClock.EXTRA_MINUTES,minute).putExtra(AlarmClock.EXTRA_MESSAGE,label)
+   runOnUiThread{startActivity(i)}
+   String.format(Locale.US,"Setting alarm for %d:%02d.",hour,minute)
+  }catch(_:Exception){"I couldn't open the alarm app."}
+ }
+ private fun setTimer(seconds:Int,label:String="ULTRON"):String{
+  return try{
+   val i=Intent(AlarmClock.ACTION_SET_TIMER).putExtra(AlarmClock.EXTRA_LENGTH,seconds).putExtra(AlarmClock.EXTRA_MESSAGE,label)
+   runOnUiThread{startActivity(i)}
+   "Setting timer."
+  }catch(_:Exception){"I couldn't open the timer."}
+ }
  private fun tryLocalCommand(message:String):String?{
   val t=message.trim()
+  val call=Regex("(?i)^(?:please\\s+)?call\\s+(.+)$").matchEntire(t)
+  if(call!=null)return callContactOrNumber(call.groupValues[1])
+  val timer=Regex("(?i)^(?:please\\s+)?(?:set\\s+)?(?:a\\s+)?timer\\s+(?:for\\s+)?(\\d+)\\s*(seconds?|secs?|minutes?|mins?|hours?|hrs?)$").matchEntire(t)
+  if(timer!=null){
+   val n=timer.groupValues[1].toInt()
+   val unit=timer.groupValues[2].lowercase(Locale.ROOT)
+   val seconds=when{unit.startsWith("h")->n*3600;unit.startsWith("m")->n*60;else->n}
+   return setTimer(seconds)
+  }
+  val alarm=Regex("(?i)^(?:please\\s+)?(?:set\\s+)?(?:an?\\s+)?alarm\\s+(?:for\\s+)?(\\d{1,2})(?::(\\d{2}))?\\s*(am|pm)?$").matchEntire(t)
+  if(alarm!=null){
+   var h=alarm.groupValues[1].toInt(); val min=alarm.groupValues[2].toIntOrNull()?:0; val ap=alarm.groupValues[3].lowercase(Locale.ROOT)
+   if(ap=="pm" && h<12)h+=12
+   if(ap=="am" && h==12)h=0
+   if(h in 0..23 && min in 0..59)return setAlarm(h,min)
+  }
   val open=Regex("(?i)^(?:please\\s+)?(?:open|launch|start)\\s+(?:the\\s+)?(?:app(?:lication)?\\s+)?(.+)$").matchEntire(t)
   if(open!=null)return openApplication(open.groupValues[1])
   val search=Regex("(?i)^(?:please\\s+)?(?:search(?:\\s+(?:the\\s+)?(?:web|internet|google))?\\s+(?:for\\s+)?|google\\s+)(.+)$").matchEntire(t)
