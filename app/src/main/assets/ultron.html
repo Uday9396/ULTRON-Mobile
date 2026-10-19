@@ -6,7 +6,7 @@
 <section id="home" class="home">
 <header><h1>ULTRON</h1><div class="online">● SYSTEM ONLINE</div></header>
 <div class="quick" style="grid-template-columns:repeat(2,1fr)"><button onclick="openCamera()">📷 CAMERA</button><button id="flashButton" onclick="toggleFlashlight()">🔦 OFF</button></div>
-<div class="core-area"><div class="core"><div class="core-inner"></div></div></div>
+<div class="core-area" style="flex-direction:column;gap:18px"><div class="core"><div class="core-inner"></div></div><button id="liveVoiceButton" onclick="toggleLiveVoice()" style="padding:14px 22px;font-size:14px">🎙 LIVE VOICE</button><div id="liveVoiceStatus" class="online" style="color:#ff6868">READY</div><div id="liveVoiceText" class="small" style="max-width:90%;text-align:center;min-height:28px"></div></div>
 <section id="morePanel" class="more"><div class="settings"><input id="baseUrl" placeholder="PC core address"><input id="token" type="password" placeholder="App token"><button onclick="saveConnection()">SAVE</button></div><div class="small" id="connState">PC settings stay hidden here.</div></section>
 <button class="moreButton" onclick="toggleMore()">⋯ MORE</button>
 <div class="composer"><input id="homeMessage" type="text" enterkeyhint="send" placeholder="Message ULTRON..." autocomplete="off"><button onclick="sendFromHome()">SEND</button></div>
@@ -17,7 +17,7 @@
 <div class="composer"><button id="voiceButton" onclick="startVoice()" aria-label="Voice input" style="width:48px;flex:0 0 48px">🎙</button><input id="chatMessage" type="text" enterkeyhint="send" placeholder="Message ULTRON..." autocomplete="off"><button onclick="sendFromChat()">SEND</button></div>
 </section>
 <script>
-let waiting=false,ttsOn=true;
+let waiting=false,ttsOn=true,liveVoiceOn=false;
 function addMessage(name,text,type=""){const c=document.getElementById("chat"),p=document.createElement("p"),s=document.createElement("strong");s.className=name==="ULTRON"?"ultron-name":"user-name";s.textContent=name+": ";p.appendChild(s);p.appendChild(document.createTextNode(text));if(type)p.classList.add(type);c.appendChild(p);c.scrollTop=c.scrollHeight;return p}
 function openChat(){document.getElementById("home").style.display="none";document.getElementById("chatScreen").classList.add("open");setTimeout(()=>document.getElementById("chatMessage").focus(),80)}
 function closeChat(){document.getElementById("chatScreen").classList.remove("open");document.getElementById("home").style.display="flex"}
@@ -27,6 +27,10 @@ function sendFromChat(){const i=document.getElementById("chatMessage"),m=i.value
 function receiveUltron(t){document.getElementById("thinking")?.remove();waiting=false;addMessage("ULTRON",t);if(ttsOn)UltronAndroid.speak(t)}
 function receiveError(t){document.getElementById("thinking")?.remove();waiting=false;addMessage("ULTRON",t,"error")}
 function startVoice(){UltronAndroid.startVoice()}
+function toggleLiveVoice(){liveVoiceOn=!liveVoiceOn;const b=document.getElementById("liveVoiceButton");b.textContent=liveVoiceOn?"■ STOP LIVE VOICE":"🎙 LIVE VOICE";b.classList.toggle("active",liveVoiceOn);if(liveVoiceOn)UltronAndroid.startLiveVoice();else UltronAndroid.stopLiveVoice()}
+function liveVoiceState(t){document.getElementById("liveVoiceStatus").textContent=t}
+function liveVoiceHeard(t){document.getElementById("liveVoiceText").textContent="YOU: "+t}
+function liveVoiceReply(t){document.getElementById("liveVoiceText").textContent="ULTRON: "+t}
 function openCamera(){UltronAndroid.openCamera()}
 function toggleFlashlight(){UltronAndroid.toggleFlashlight()}
 function flashlightState(t){const b=document.getElementById("flashButton");b.textContent="🔦 "+t;b.classList.toggle("active",t==="ON")}
