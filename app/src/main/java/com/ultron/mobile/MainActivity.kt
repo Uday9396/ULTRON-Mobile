@@ -231,8 +231,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
   if(route!=null)return startNavigation(route.groupValues[2],route.groupValues[1])
   val navTo=Regex("(?i)^(?:please\\s+)?(?:start\\s+)?(?:navigation|navigate)\\s+(?:to\\s+)(.+)$").matchEntire(t)
   if(navTo!=null)return startNavigation(navTo.groupValues[1])
-  val call=Regex("(?i)^(?:please\\s+)?call\\s+(.+)$").matchEntire(t)
-  if(call!=null)return callContactOrNumber(call.groupValues[1])
+  val call=Regex("(?i)^(?:(?:hey\\s+)?ultron[,:;.!?\\-]*\\s*)?(?:please\\s+)?(?:can\\s+you\\s+|could\\s+you\\s+|would\\s+you\\s+)?(?:call|dial|phone|ring)\\s+(?:my\\s+)?(.+?)[.!?]*$").matchEntire(t)
+  if(call!=null)return callContactOrNumber(call.groupValues[1].trim())
   val timer=Regex("(?i)^(?:please\\s+)?(?:set\\s+)?(?:a\\s+)?timer\\s+(?:for\\s+)?(\\d+)\\s*(seconds?|secs?|minutes?|mins?|hours?|hrs?)$").matchEntire(t)
   if(timer!=null){
    val n=timer.groupValues[1].toInt()
