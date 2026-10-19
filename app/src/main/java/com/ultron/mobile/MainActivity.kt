@@ -227,10 +227,14 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
  }
  private fun tryLocalCommand(message:String):String?{
   val t=message.trim()
-  val route=Regex("(?i)^(?:please\\s+)?(?:start\\s+)?(?:navigation|navigate|directions?)\\s+(?:from\\s+)?(.+?)\\s+to\\s+(.+)$").matchEntire(t)
-  if(route!=null)return startNavigation(route.groupValues[2],route.groupValues[1])
-  val navTo=Regex("(?i)^(?:please\\s+)?(?:start\\s+)?(?:navigation|navigate)\\s+(?:to\\s+)(.+)$").matchEntire(t)
-  if(navTo!=null)return startNavigation(navTo.groupValues[1])
+  val route=Regex("(?i)^(?:(?:hey\\s+)?ultron[,:;.!?\\-]*\\s*)?(?:please\\s+)?(?:(?:start|begin)\\s+)?(?:navigation|navigate|directions?)\\s+from\\s+(.+?)\\s+to\\s+(.+?)[.!?]*$").matchEntire(t)
+  if(route!=null){
+   val origin=route.groupValues[1].trim()
+   val actualOrigin=if(origin.equals("my location",true)||origin.equals("current location",true)||origin.equals("here",true))null else origin
+   return startNavigation(route.groupValues[2].trim(),actualOrigin)
+  }
+  val navTo=Regex("(?i)^(?:(?:hey\\s+)?ultron[,:;.!?\\-]*\\s*)?(?:please\\s+)?(?:(?:start|begin)\\s+)?(?:navigation|navigate|directions?)\\s+(?:to\\s+)(.+?)[.!?]*$").matchEntire(t)
+  if(navTo!=null)return startNavigation(navTo.groupValues[1].trim())
   val call=Regex("(?i)^(?:(?:hey\\s+)?ultron[,:;.!?\\-]*\\s*)?(?:please\\s+)?(?:can\\s+you\\s+|could\\s+you\\s+|would\\s+you\\s+)?(?:call|dial|phone|ring)\\s+(?:my\\s+)?(.+?)[.!?]*$").matchEntire(t)
   if(call!=null)return callContactOrNumber(call.groupValues[1].trim())
   val timer=Regex("(?i)^(?:please\\s+)?(?:set\\s+)?(?:a\\s+)?timer\\s+(?:for\\s+)?(\\d+)\\s*(seconds?|secs?|minutes?|mins?|hours?|hrs?)$").matchEntire(t)
