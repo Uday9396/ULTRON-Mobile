@@ -31,9 +31,9 @@ function startHomeVoice(){if(waiting)return;homeVoice=true;document.getElementBy
 function voiceState(t){if(homeVoice){document.getElementById("ultronCore").classList.add("voice-active")}else{document.getElementById("voiceButton").textContent="🎙 "+t}}
 function voiceResult(t){if(homeVoice){if(t)sendHomeVoice(t);else homeVoiceDone()}else{document.getElementById("voiceButton").textContent="🎙 VOICE";if(t)sendCore(t)}}
 function sendHomeVoice(m){m=(m||"").trim();if(!m||waiting)return;waiting=true;UltronAndroid.sendHomeVoiceMessage(m)}
-function homeVoiceThinking(){document.getElementById("ultronCore").classList.add("voice-active");document.getElementById("homeVoiceButton").textContent="…"}
+function homeVoiceThinking(){document.getElementById("ultronCore").classList.add("voice-active")}
 function homeVoiceReply(t){waiting=false;document.getElementById("ultronCore").classList.add("voice-active");UltronAndroid.speakHomeVoice(t)}
-function homeVoiceDone(){waiting=false;homeVoice=false;document.getElementById("ultronCore").classList.remove("voice-active");document.getElementById("homeVoiceButton").textContent="🎙"}
+function homeVoiceDone(){waiting=false;homeVoice=false;document.getElementById("ultronCore").classList.remove("voice-active")}
 function homeVoiceError(t){waiting=false;homeVoice=false;document.getElementById("ultronCore").classList.remove("voice-active");alert(t)}
 function openCamera(){UltronAndroid.openCamera()}
 function toggleFlashlight(){UltronAndroid.toggleFlashlight()}
