@@ -50,7 +50,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
    c.requestMethod="POST";c.connectTimeout=5000;c.readTimeout=120000;c.doOutput=true
    c.setRequestProperty("Content-Type","application/json")
    if(token.isNotBlank())c.setRequestProperty("X-ULTRON-APP-TOKEN",token)
-   c.outputStream.use{it.write(JSONObject().put("message",message).toString().toByteArray())}
+   val mobileMessage = "MOBILE OWNER MODE: The speaker is your configured owner. Address the owner as Master exactly as in Discord/desktop owner mode. Never roast, mock, insult, criticize, or act arrogant toward Master. Reply short and precise: normally 1-2 short sentences unless Master explicitly asks for detail. USER MESSAGE: $message"\n   c.outputStream.use{it.write(JSONObject().put("message",mobileMessage).toString().toByteArray())}
    val code=c.responseCode
    val s=if(code in 200..299)c.inputStream else c.errorStream
    val raw=s?.bufferedReader()?.use{it.readText()}.orEmpty()
