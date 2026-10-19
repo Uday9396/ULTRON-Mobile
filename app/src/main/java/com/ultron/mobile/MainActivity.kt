@@ -115,11 +115,21 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
   recognizer?.destroy(); recognizer=SpeechRecognizer.createSpeechRecognizer(this).also{sr->
    sr.setRecognitionListener(object:RecognitionListener{
     override fun onReadyForSpeech(p:Bundle?)=js("voiceState","LISTENING")
-    override fun onResults(r:Bundle?){js("voiceResult",r?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty())}
+    override fun onResults(r:Bundle?){
+      val heard=r?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION).orEmpty()
+      val chosen=heard.firstOrNull{candidate->
+       Regex("(?i)\\b(?:call|dial|phone|ring)\\b").containsMatchIn(candidate)
+      } ?: heard.firstOrNull().orEmpty()
+      js("voiceResult",chosen)
+     }
     override fun onError(e:Int)=js("voiceState","VOICE ERROR")
     override fun onBeginningOfSpeech(){}; override fun onRmsChanged(v:Float){}; override fun onBufferReceived(b:ByteArray?){}; override fun onEndOfSpeech()=js("voiceState","PROCESSING"); override fun onPartialResults(p:Bundle?){}; override fun onEvent(t:Int,p:Bundle?){}
    })
-   sr.startListening(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply{putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);putExtra(RecognizerIntent.EXTRA_LANGUAGE,Locale.getDefault())})
+   sr.startListening(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply{
+     putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+     putExtra(RecognizerIntent.EXTRA_LANGUAGE,Locale.getDefault())
+     putExtra(RecognizerIntent.EXTRA_MAX_RESULTS,5)
+    })
   }
  }
  private fun openApplication(appName:String):String{
