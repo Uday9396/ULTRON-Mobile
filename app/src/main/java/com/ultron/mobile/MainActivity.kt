@@ -117,9 +117,13 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     override fun onReadyForSpeech(p:Bundle?)=js("voiceState","LISTENING")
     override fun onResults(r:Bundle?){
       val heard=r?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION).orEmpty()
-      val chosen=heard.firstOrNull{candidate->
-       Regex("(?i)\\b(?:call|dial|phone|ring)\\b").containsMatchIn(candidate)
-      } ?: heard.firstOrNull().orEmpty()
+      val callPattern=Regex("(?i)^(?:(?:hey\\s+)?ultron[,:;.!?\\-]*\\s*)?(?:please\\s+)?(?:can\\s+you\\s+|could\\s+you\\s+|would\\s+you\\s+)?(?:call|dial|phone|ring)\\s+(?:my\\s+)?(.+?)[.!?]*$")
+      val callCandidates=heard.mapNotNull{candidate->
+       callPattern.matchEntire(candidate)?.let{candidate to it.groupValues[1].trim()}
+      }
+      val chosen=if(callCandidates.isNotEmpty() && ContextCompat.checkSelfPermission(this,Manifest.permission.READ_CONTACTS)==PackageManager.PERMISSION_GRANTED){
+       callCandidates.maxByOrNull{(_,name)->contactMatchScore(name)}?.first ?: callCandidates.first().first
+      }else callCandidates.firstOrNull()?.first ?: heard.firstOrNull().orEmpty()
       js("voiceResult",chosen)
      }
     override fun onError(e:Int)=js("voiceState","VOICE ERROR")
@@ -175,6 +179,24 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
    "Searching for $q."
   }catch(_:ActivityNotFoundException){"I couldn't open a browser."}
  }
+ private fun contactMatchScore(target:String):Int{
+  val who=target.trim()
+  if(who.isBlank())return 0
+  var exact=0
+  var partial=0
+  contentResolver.query(
+   ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+   arrayOf(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME),
+   ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME+" LIKE ?",
+   arrayOf("%$who%"),null
+  )?.use{cur->
+   while(cur.moveToNext()){
+    val name=cur.getString(0)?.trim().orEmpty()
+    if(name.equals(who,true))exact++ else partial++
+   }
+  }
+  return exact*100+partial
+ }
  private fun callContactOrNumber(target:String):String{
   val who=target.trim()
   if(who.isBlank())return "Tell me who to call."
@@ -188,7 +210,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME+" LIKE ?",
     arrayOf("%$who%"),ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME+" COLLATE NOCASE ASC"
    )?.use{cur->
-    while(cur.moveToNext())matches.add(cur.getString(1) to cur.getString(0))
+    while(cur.moveToNext())matches.add(cur.getString(1).trim() to cur.getString(0))
    }
    val unique=matches.distinctBy{it.first.lowercase(Locale.ROOT)}
    if(unique.size==1)number=unique.first().second
