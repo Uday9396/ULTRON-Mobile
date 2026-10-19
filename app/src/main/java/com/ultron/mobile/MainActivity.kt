@@ -121,7 +121,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
       val callCandidates=heard.mapNotNull{candidate->
        callPattern.matchEntire(candidate)?.let{candidate to it.groupValues[1].trim()}
       }
-      val chosen=if(callCandidates.isNotEmpty() && ContextCompat.checkSelfPermission(this,Manifest.permission.READ_CONTACTS)==PackageManager.PERMISSION_GRANTED){
+      val chosen=if(callCandidates.isNotEmpty() && ContextCompat.checkSelfPermission(this@MainActivity,Manifest.permission.READ_CONTACTS)==PackageManager.PERMISSION_GRANTED){
        callCandidates.maxByOrNull{(_,name)->contactMatchScore(name)}?.first ?: callCandidates.first().first
       }else callCandidates.firstOrNull()?.first ?: heard.firstOrNull().orEmpty()
       js("voiceResult",chosen)
