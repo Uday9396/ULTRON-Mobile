@@ -30,6 +30,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
  private var tts: TextToSpeech? = null
  private var recognizer: SpeechRecognizer? = null
  private var torchOn = false
+ private var liveVoiceMode = false
  private val prefs by lazy { getSharedPreferences("ultron_mobile", Context.MODE_PRIVATE) }
  private val defaultPcBase = "http://192.168.0.104:5000"
 
@@ -100,16 +101,43 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
    js("connectionState","AUTO-CONNECTED: $it")
   }
  }
- private fun listen(){
+ private fun listen(live:Boolean=false){
+  liveVoiceMode=live
   if(ContextCompat.checkSelfPermission(this,Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){ActivityCompat.requestPermissions(this,arrayOf(Manifest.permission.RECORD_AUDIO),40);return}
   recognizer?.destroy(); recognizer=SpeechRecognizer.createSpeechRecognizer(this).also{sr->
    sr.setRecognitionListener(object:RecognitionListener{
     override fun onReadyForSpeech(p:Bundle?)=js("voiceState","LISTENING")
-    override fun onResults(r:Bundle?){js("voiceResult",r?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty())}
+    override fun onResults(r:Bundle?){val heard=r?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty(); if(liveVoiceMode)handleLiveVoice(heard) else js("voiceResult",heard)}
     override fun onError(e:Int)=js("voiceState","VOICE ERROR")
     override fun onBeginningOfSpeech(){}; override fun onRmsChanged(v:Float){}; override fun onBufferReceived(b:ByteArray?){}; override fun onEndOfSpeech()=js("voiceState","PROCESSING"); override fun onPartialResults(p:Bundle?){}; override fun onEvent(t:Int,p:Bundle?){}
    })
    sr.startListening(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply{putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);putExtra(RecognizerIntent.EXTRA_LANGUAGE,Locale.getDefault())})
+  }
+ }
+ private fun handleLiveVoice(message:String){
+  if(message.isBlank()){js("liveVoiceState","LISTENING");runOnUiThread{listen(true)};return}
+  js("liveVoiceHeard",message); js("liveVoiceState","THINKING")
+  val base=prefs.getString("base",defaultPcBase)?.trim()?.trimEnd('/').orEmpty()
+  val token=prefs.getString("token","")?.trim().orEmpty()
+  thread{
+   var answer=tryChat(base,token,message)
+   if(answer==null){
+    val discovered=discoverCore()
+    if(discovered!=null)answer=tryChat(discovered,token,message)
+   }
+   if(answer!=null){
+    js("liveVoiceReply",answer)
+    runOnUiThread{
+     tts?.setOnUtteranceProgressListener(object:android.speech.tts.UtteranceProgressListener(){
+      override fun onStart(id:String?){js("liveVoiceState","SPEAKING")}
+      override fun onDone(id:String?){if(liveVoiceMode){js("liveVoiceState","LISTENING");runOnUiThread{listen(true)}}}
+      @Deprecated("Deprecated in Java") override fun onError(id:String?){if(liveVoiceMode){js("liveVoiceState","LISTENING");runOnUiThread{listen(true)}}}
+     })
+     tts?.speak(answer,TextToSpeech.QUEUE_FLUSH,null,"ultron_live_voice")
+    }
+   }else{
+    js("liveVoiceState","CORE UNAVAILABLE")
+   }
   }
  }
  private fun openCamera(){
@@ -131,7 +159,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
   }catch(_:Exception){torchOn=false;js("flashlightState","UNAVAILABLE")}
  }
  inner class Bridge{
-  @JavascriptInterface fun startVoice()=runOnUiThread{listen()}
+  @JavascriptInterface fun startVoice()=runOnUiThread{listen(false)}
+  @JavascriptInterface fun startLiveVoice()=runOnUiThread{liveVoiceMode=true;tts?.stop();listen(true)}
+  @JavascriptInterface fun stopLiveVoice()=runOnUiThread{liveVoiceMode=false;recognizer?.cancel();tts?.stop();js("liveVoiceState","READY")}
   @JavascriptInterface fun openCamera()=runOnUiThread{this@MainActivity.openCamera()}
   @JavascriptInterface fun toggleFlashlight()=runOnUiThread{toggleTorch()}
   @JavascriptInterface fun speak(text:String){
