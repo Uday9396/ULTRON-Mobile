@@ -7,6 +7,8 @@ import android.content.pm.PackageManager
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
 import android.provider.MediaStore
+import android.content.ActivityNotFoundException
+import android.net.Uri
 import android.os.Bundle
 import android.speech.*
 import android.speech.tts.TextToSpeech
@@ -118,6 +120,39 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
    sr.startListening(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply{putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);putExtra(RecognizerIntent.EXTRA_LANGUAGE,Locale.getDefault())})
   }
  }
+ private fun openApplication(appName:String):String{
+  val name=appName.trim()
+  if(name.isBlank())return "Tell me which application to open."
+  val pm=packageManager
+  val direct=pm.getInstalledApplications(PackageManager.GET_META_DATA).firstOrNull{
+   pm.getApplicationLabel(it).toString().equals(name,ignoreCase=true)
+  }
+  val fuzzy=direct ?: pm.getInstalledApplications(PackageManager.GET_META_DATA).firstOrNull{
+   pm.getApplicationLabel(it).toString().contains(name,ignoreCase=true)
+  }
+  val intent=fuzzy?.packageName?.let{pm.getLaunchIntentForPackage(it)}
+  return if(intent!=null){
+   runOnUiThread{startActivity(intent)}
+   "Opening "+pm.getApplicationLabel(fuzzy).toString()+"."
+  }else "I couldn't find an installed application named $name."
+ }
+ private fun searchWeb(query:String):String{
+  val q=query.trim()
+  if(q.isBlank())return "Tell me what to search for."
+  return try{
+   val intent=Intent(Intent.ACTION_VIEW,Uri.parse("https://www.google.com/search?q="+Uri.encode(q)))
+   runOnUiThread{startActivity(intent)}
+   "Searching for $q."
+  }catch(_:ActivityNotFoundException){"I couldn't open a browser."}
+ }
+ private fun tryLocalCommand(message:String):String?{
+  val t=message.trim()
+  val open=Regex("(?i)^(?:please\\s+)?(?:open|launch|start)\\s+(?:the\\s+)?(?:app(?:lication)?\\s+)?(.+)$").matchEntire(t)
+  if(open!=null)return openApplication(open.groupValues[1])
+  val search=Regex("(?i)^(?:please\\s+)?(?:search(?:\\s+(?:the\\s+)?(?:web|internet|google))?\\s+(?:for\\s+)?|google\\s+)(.+)$").matchEntire(t)
+  if(search!=null)return searchWeb(search.groupValues[1])
+  return null
+ }
  private fun openCamera(){
   try{startActivity(Intent(MediaStore.ACTION_IMAGE_CAPTURE))}catch(_:Exception){js("cameraState","CAMERA UNAVAILABLE")}
  }
@@ -148,6 +183,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
   @JavascriptInterface fun saveConnection(base:String,token:String){prefs.edit().putString("base",base.trim().trimEnd('/')).putString("token",token.trim()).apply();js("connectionState","SAVED")}
   @JavascriptInterface fun getBaseUrl():String=prefs.getString("base",defaultPcBase)?:defaultPcBase
   @JavascriptInterface fun sendHomeVoiceMessage(message:String){
+   val local=tryLocalCommand(message)
+   if(local!=null){js("homeVoiceReply",local);return}
    val base=prefs.getString("base",defaultPcBase)?.trim()?.trimEnd('/').orEmpty()
    val token=prefs.getString("token","")?.trim().orEmpty()
    js("homeVoiceThinking","")
@@ -165,6 +202,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
    runOnUiThread{tts?.setPitch(0.72f);tts?.setSpeechRate(0.92f);tts?.speak(text,TextToSpeech.QUEUE_FLUSH,null,"ultron_home_voice")}
   }
   @JavascriptInterface fun sendMessage(message:String){
+   val local=tryLocalCommand(message)
+   if(local!=null){js("receiveUltron",local);return}
    val base=prefs.getString("base",defaultPcBase)?.trim()?.trimEnd('/').orEmpty()
    val token=prefs.getString("token","")?.trim().orEmpty()
    thread{
