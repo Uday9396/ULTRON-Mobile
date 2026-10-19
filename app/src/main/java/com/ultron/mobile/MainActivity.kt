@@ -37,6 +37,11 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
  @SuppressLint("SetJavaScriptEnabled")
  override fun onCreate(b: Bundle?) { super.onCreate(b)
   tts=TextToSpeech(this,this)
+  tts?.setOnUtteranceProgressListener(object:android.speech.tts.UtteranceProgressListener(){
+   override fun onStart(id:String?){}
+   override fun onDone(id:String?){if(id=="ultron_home_voice")js("homeVoiceDone","")}
+   @Deprecated("Deprecated in Java") override fun onError(id:String?){if(id=="ultron_home_voice")js("homeVoiceDone","")}
+  })
   web=WebView(this).apply { setBackgroundColor(android.graphics.Color.BLACK); settings.javaScriptEnabled=true; settings.domStorageEnabled=true; webViewClient=WebViewClient(); webChromeClient=WebChromeClient(); addJavascriptInterface(Bridge(),"UltronAndroid"); loadUrl("file:///android_asset/ultron.html") }; setContentView(web)
  }
  private fun js(fn:String,v:String){ val q=JSONObject.quote(v); runOnUiThread{web.evaluateJavascript("$fn($q)",null)} }
@@ -171,6 +176,23 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
   @JavascriptInterface fun stopSpeaking()=runOnUiThread{tts?.stop()}
   @JavascriptInterface fun saveConnection(base:String,token:String){prefs.edit().putString("base",base.trim().trimEnd('/')).putString("token",token.trim()).apply();js("connectionState","SAVED")}
   @JavascriptInterface fun getBaseUrl():String=prefs.getString("base",defaultPcBase)?:defaultPcBase
+  @JavascriptInterface fun sendHomeVoiceMessage(message:String){
+   val base=prefs.getString("base",defaultPcBase)?.trim()?.trimEnd('/').orEmpty()
+   val token=prefs.getString("token","")?.trim().orEmpty()
+   js("homeVoiceThinking","")
+   thread{
+    var answer=tryChat(base,token,message)
+    if(answer==null){
+     val discovered=discoverCore()
+     if(discovered!=null)answer=tryChat(discovered,token,message)
+    }
+    if(answer!=null)js("homeVoiceReply",answer) else js("homeVoiceError","ULTRON core unavailable.")
+   }
+  }
+  @JavascriptInterface fun speakHomeVoice(text:String){
+   if(text.isBlank()){js("homeVoiceDone","");return}
+   runOnUiThread{tts?.speak(text,TextToSpeech.QUEUE_FLUSH,null,"ultron_home_voice")}
+  }
   @JavascriptInterface fun sendMessage(message:String){
    val base=prefs.getString("base",defaultPcBase)?.trim()?.trimEnd('/').orEmpty()
    val token=prefs.getString("token","")?.trim().orEmpty()
