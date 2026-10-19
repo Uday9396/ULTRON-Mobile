@@ -17,6 +17,11 @@ import androidx.core.content.ContextCompat
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.Inet4Address
+import android.net.ConnectivityManager
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 import java.util.Locale
 import kotlin.concurrent.thread
 
@@ -26,7 +31,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
  private var recognizer: SpeechRecognizer? = null
  private var torchOn = false
  private val prefs by lazy { getSharedPreferences("ultron_mobile", Context.MODE_PRIVATE) }
- private val defaultPcBase = "http://192.168.0.109:5000"
+ private val defaultPcBase = "http://192.168.0.104:5000"
 
  @SuppressLint("SetJavaScriptEnabled")
  override fun onCreate(b: Bundle?) { super.onCreate(b)
@@ -52,6 +57,48 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }else null
    }else null
   }catch(_:Exception){null}
+ }
+ private fun currentIpv4Prefix():String?{
+  return try{
+   val cm=getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+   val network=cm.activeNetwork ?: return null
+   val address=cm.getLinkProperties(network)?.linkAddresses
+    ?.mapNotNull{it.address as? Inet4Address}
+    ?.firstOrNull{!it.isLoopbackAddress}?.hostAddress ?: return null
+   address.substringBeforeLast('.', "")
+  }catch(_:Exception){null}
+ }
+ private fun looksLikeUltron(base:String):Boolean{
+  return try{
+   val c=URL(base.trimEnd('/') + "/").openConnection() as HttpURLConnection
+   c.requestMethod="GET"; c.connectTimeout=350; c.readTimeout=700
+   val code=c.responseCode
+   val raw=if(code in 200..299)c.inputStream.bufferedReader().use{it.readText().take(12000)} else ""
+   c.disconnect()
+   code in 200..299 && raw.contains("ULTRON", ignoreCase=true)
+  }catch(_:Exception){false}
+ }
+ private fun discoverCore():String?{
+  val saved=prefs.getString("base","")?.trim()?.trimEnd('/').orEmpty()
+  val quick=listOf(saved,defaultPcBase).filter{it.isNotBlank()}.distinct()
+  quick.firstOrNull{looksLikeUltron(it)}?.let{return it}
+  val prefix=currentIpv4Prefix() ?: return null
+  val found=AtomicReference<String?>(null)
+  val pool=Executors.newFixedThreadPool(24)
+  for(i in 1..254){
+   pool.submit{
+    if(found.get()!=null)return@submit
+    val candidate="http://$prefix.$i:5000"
+    if(looksLikeUltron(candidate))found.compareAndSet(null,candidate)
+   }
+  }
+  pool.shutdown()
+  pool.awaitTermination(5,TimeUnit.SECONDS)
+  pool.shutdownNow()
+  return found.get()?.also{
+   prefs.edit().putString("base",it).apply()
+   js("connectionState","AUTO-CONNECTED: $it")
+  }
  }
  private fun listen(){
   if(ContextCompat.checkSelfPermission(this,Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){ActivityCompat.requestPermissions(this,arrayOf(Manifest.permission.RECORD_AUDIO),40);return}
@@ -98,8 +145,16 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
    val base=prefs.getString("base",defaultPcBase)?.trim()?.trimEnd('/').orEmpty()
    val token=prefs.getString("token","")?.trim().orEmpty()
    thread{
-    val answer=tryChat(base,token,message)
-    if(answer!=null)js("receiveUltron",answer) else js("receiveError","ULTRON core unavailable.")
+    var activeBase=base
+    var answer=tryChat(activeBase,token,message)
+    if(answer==null){
+     val discovered=discoverCore()
+     if(discovered!=null){
+      activeBase=discovered
+      answer=tryChat(activeBase,token,message)
+     }
+    }
+    if(answer!=null)js("receiveUltron",answer) else js("receiveError","ULTRON core unavailable. Make sure the PC core is running and both devices are on the same Wi-Fi.")
    }
   } }
  override fun onInit(status:Int){
