@@ -203,8 +203,34 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
    "Setting timer."
   }catch(_:Exception){"I couldn't open the timer."}
  }
+ private fun startNavigation(destination:String,origin:String?=null):String{
+  val to=destination.trim()
+  val from=origin?.trim().orEmpty()
+  if(to.isBlank())return "Tell me where you want to navigate."
+  return try{
+   val url=buildString{
+    append("https://www.google.com/maps/dir/?api=1")
+    if(from.isNotBlank())append("&origin=").append(Uri.encode(from))
+    append("&destination=").append(Uri.encode(to))
+    append("&travelmode=driving")
+   }
+   val maps=Intent(Intent.ACTION_VIEW,Uri.parse(url)).apply{
+    setPackage("com.google.android.apps.maps")
+    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+   }
+   runOnUiThread{
+    try{startActivity(maps)}
+    catch(_:ActivityNotFoundException){startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(url)))}
+   }
+   if(from.isBlank())"Opening Maps and starting navigation to $to." else "Opening Maps with directions from $from to $to."
+  }catch(_:Exception){"I couldn't open navigation."}
+ }
  private fun tryLocalCommand(message:String):String?{
   val t=message.trim()
+  val route=Regex("(?i)^(?:please\\s+)?(?:start\\s+)?(?:navigation|navigate|directions?)\\s+(?:from\\s+)?(.+?)\\s+to\\s+(.+)$").matchEntire(t)
+  if(route!=null)return startNavigation(route.groupValues[2],route.groupValues[1])
+  val navTo=Regex("(?i)^(?:please\\s+)?(?:start\\s+)?(?:navigation|navigate)\\s+(?:to\\s+)(.+)$").matchEntire(t)
+  if(navTo!=null)return startNavigation(navTo.groupValues[1])
   val call=Regex("(?i)^(?:please\\s+)?call\\s+(.+)$").matchEntire(t)
   if(call!=null)return callContactOrNumber(call.groupValues[1])
   val timer=Regex("(?i)^(?:please\\s+)?(?:set\\s+)?(?:a\\s+)?timer\\s+(?:for\\s+)?(\\d+)\\s*(seconds?|secs?|minutes?|mins?|hours?|hrs?)$").matchEntire(t)
