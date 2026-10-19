@@ -193,8 +193,19 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
    val unique=matches.distinctBy{it.first.lowercase(Locale.ROOT)}
    if(unique.size==1)number=unique.first().second
    else if(unique.size>1){
-    val names=unique.mapIndexed{i,item->"${i+1}. ${item.first}"}.joinToString(", ")
-    return "I found ${unique.size} contacts matching $who: $names. Say the full contact name you want."
+    runOnUiThread{
+     val labels=unique.map{it.first}.toTypedArray()
+     androidx.appcompat.app.AlertDialog.Builder(this)
+      .setTitle("Choose contact")
+      .setItems(labels){_,which->
+       val selected=unique[which]
+       try{startActivity(Intent(Intent.ACTION_DIAL,Uri.parse("tel:"+Uri.encode(selected.second))))}
+       catch(_:Exception){}
+      }
+      .setNegativeButton("Cancel",null)
+      .show()
+    }
+    return "I found ${unique.size} contacts matching $who. Choose the contact on screen."
    }
   }
   if(number.isBlank()){
@@ -228,21 +239,23 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
   val from=origin?.trim().orEmpty()
   if(to.isBlank())return "Tell me where you want to navigate."
   return try{
-   val url=buildString{
+   val navigationUrl="google.navigation:q="+Uri.encode(to)+"&mode=d"
+   val directionsUrl=buildString{
     append("https://www.google.com/maps/dir/?api=1")
     if(from.isNotBlank())append("&origin=").append(Uri.encode(from))
     append("&destination=").append(Uri.encode(to))
     append("&travelmode=driving")
    }
-   val maps=Intent(Intent.ACTION_VIEW,Uri.parse(url)).apply{
+   val targetUrl=if(from.isBlank())navigationUrl else directionsUrl
+   val maps=Intent(Intent.ACTION_VIEW,Uri.parse(targetUrl)).apply{
     setPackage("com.google.android.apps.maps")
     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
    }
    runOnUiThread{
     try{startActivity(maps)}
-    catch(_:ActivityNotFoundException){startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(url)))}
+    catch(_:ActivityNotFoundException){startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(directionsUrl)))}
    }
-   if(from.isBlank())"Opening Maps and starting navigation to $to." else "Opening Maps with directions from $from to $to."
+   if(from.isBlank())"Starting navigation to $to." else "Opening Maps with directions from $from to $to."
   }catch(_:Exception){"I couldn't open navigation."}
  }
  private fun tryLocalCommand(message:String):String?{
