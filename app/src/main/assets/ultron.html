@@ -26,17 +26,19 @@ function sendFromHome(){const i=document.getElementById("homeMessage"),m=i.value
 function sendFromChat(){const i=document.getElementById("chatMessage"),m=i.value;i.value="";sendCore(m)}
 function receiveUltron(t){document.getElementById("thinking")?.remove();waiting=false;addMessage("ULTRON",t);if(ttsOn)UltronAndroid.speak(t)}
 function receiveError(t){document.getElementById("thinking")?.remove();waiting=false;addMessage("ULTRON",t,"error")}
-function startVoice(){homeVoice=false;UltronAndroid.startVoice()}\nfunction startHomeVoice(){if(waiting)return;homeVoice=true;document.getElementById("ultronCore").classList.add("voice-active");document.getElementById("homeVoiceButton").textContent="●";UltronAndroid.startVoice()}
-function toggleLiveVoice(){liveVoiceOn=!liveVoiceOn;const b=document.getElementById("liveVoiceButton");b.textContent=liveVoiceOn?"■ STOP LIVE VOICE":"🎙 LIVE VOICE";b.classList.toggle("active",liveVoiceOn);if(liveVoiceOn)UltronAndroid.startLiveVoice();else UltronAndroid.stopLiveVoice()}
-function liveVoiceState(t){document.getElementById("liveVoiceStatus").textContent=t}
-function liveVoiceHeard(t){document.getElementById("liveVoiceText").textContent="YOU: "+t}
-function liveVoiceReply(t){document.getElementById("liveVoiceText").textContent="ULTRON: "+t}
+function startVoice(){homeVoice=false;UltronAndroid.startVoice()}
+function startHomeVoice(){if(waiting)return;homeVoice=true;document.getElementById("ultronCore").classList.add("voice-active");document.getElementById("homeVoiceButton").textContent="●";UltronAndroid.startVoice()}
+function voiceState(t){if(homeVoice){document.getElementById("homeVoiceButton").textContent=t==="LISTENING"?"●":"…";document.getElementById("ultronCore").classList.add("voice-active")}else{document.getElementById("voiceButton").textContent="🎙 "+t}}
+function voiceResult(t){if(homeVoice){if(t)sendHomeVoice(t);else homeVoiceDone()}else{document.getElementById("voiceButton").textContent="🎙 VOICE";if(t)sendCore(t)}}
+function sendHomeVoice(m){m=(m||"").trim();if(!m||waiting)return;waiting=true;UltronAndroid.sendHomeVoiceMessage(m)}
+function homeVoiceThinking(){document.getElementById("ultronCore").classList.add("voice-active");document.getElementById("homeVoiceButton").textContent="…"}
+function homeVoiceReply(t){waiting=false;document.getElementById("ultronCore").classList.add("voice-active");document.getElementById("homeVoiceButton").textContent="🔊";UltronAndroid.speakHomeVoice(t)}
+function homeVoiceDone(){waiting=false;homeVoice=false;document.getElementById("ultronCore").classList.remove("voice-active");document.getElementById("homeVoiceButton").textContent="🎙"}
+function homeVoiceError(t){waiting=false;homeVoice=false;document.getElementById("ultronCore").classList.remove("voice-active");document.getElementById("homeVoiceButton").textContent="🎙";alert(t)}
 function openCamera(){UltronAndroid.openCamera()}
 function toggleFlashlight(){UltronAndroid.toggleFlashlight()}
 function flashlightState(t){const b=document.getElementById("flashButton");b.textContent="🔦 "+t;b.classList.toggle("active",t==="ON")}
 function cameraState(t){if(t==="CAMERA UNAVAILABLE")alert(t)}
-function voiceState(t){document.getElementById("voiceButton").textContent="🎙 "+t}
-function voiceResult(t){document.getElementById("voiceButton").textContent="🎙 VOICE";if(t)sendCore(t)}
 function toggleTts(){ttsOn=!ttsOn;if(!ttsOn){try{UltronAndroid.stopSpeaking()}catch(e){}}document.getElementById("ttsButton").textContent="🔊 TTS: "+(ttsOn?"ON":"OFF")}
 function toggleMore(){document.getElementById("morePanel").classList.toggle("open")}
 function saveConnection(){UltronAndroid.saveConnection(document.getElementById("baseUrl").value,document.getElementById("token").value)}
