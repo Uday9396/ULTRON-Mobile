@@ -171,10 +171,26 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
   val digits=who.filter{it.isDigit() || it=='+'}
   var number=if(digits.count{it.isDigit()}>=5)digits else ""
   if(number.isBlank() && ContextCompat.checkSelfPermission(this,Manifest.permission.READ_CONTACTS)==PackageManager.PERMISSION_GRANTED){
-   contentResolver.query(ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
-    arrayOf(ContactsContract.CommonDataKinds.Phone.NUMBER,ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME),
-    ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME+" LIKE ?",arrayOf("%$who%"),null)?.use{cur->
-     if(cur.moveToFirst())number=cur.getString(0)
+   val projection=arrayOf(ContactsContract.CommonDataKinds.Phone.NUMBER,ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
+   // Prefer an exact contact-name match. A broad LIKE query can pick the wrong
+   // person when several contacts contain the same word (for example "Roopa").
+   contentResolver.query(
+    ContactsContract.CommonDataKinds.Phone.CONTENT_URI,projection,
+    ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME+" = ? COLLATE NOCASE",
+    arrayOf(who),ContactsContract.CommonDataKinds.Phone.IS_SUPER_PRIMARY+" DESC"
+   )?.use{cur->if(cur.moveToFirst())number=cur.getString(0)}
+   if(number.isBlank()){
+    val matches=mutableListOf<Pair<String,String>>()
+    contentResolver.query(
+     ContactsContract.CommonDataKinds.Phone.CONTENT_URI,projection,
+     ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME+" LIKE ?",
+     arrayOf("%$who%"),ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME+" COLLATE NOCASE ASC"
+    )?.use{cur->
+     while(cur.moveToNext())matches.add(cur.getString(1) to cur.getString(0))
+    }
+    val unique=matches.distinctBy{it.first.lowercase(Locale.ROOT)}
+    if(unique.size==1)number=unique.first().second
+    else if(unique.size>1)return "I found multiple contacts matching $who. Say the full contact name."
    }
   }
   if(number.isBlank()){
