@@ -123,17 +123,35 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
  private fun openApplication(appName:String):String{
   val name=appName.trim()
   if(name.isBlank())return "Tell me which application to open."
-  val pm=packageManager
-  val direct=pm.getInstalledApplications(PackageManager.GET_META_DATA).firstOrNull{
-   pm.getApplicationLabel(it).toString().equals(name,ignoreCase=true)
+  val knownPackages=mapOf(
+   "youtube" to "com.google.android.youtube",
+   "chrome" to "com.android.chrome",
+   "whatsapp" to "com.whatsapp",
+   "instagram" to "com.instagram.android",
+   "facebook" to "com.facebook.katana",
+   "spotify" to "com.spotify.music",
+   "gmail" to "com.google.android.gm",
+   "maps" to "com.google.android.apps.maps",
+   "google maps" to "com.google.android.apps.maps",
+   "play store" to "com.android.vending",
+   "settings" to "com.android.settings"
+  )
+  val key=name.lowercase(Locale.ROOT)
+  val known=knownPackages[key]?.let{packageName->packageManager.getLaunchIntentForPackage(packageName)}
+  if(known!=null){
+   runOnUiThread{startActivity(known)}
+   return "Opening $name."
   }
-  val fuzzy=direct ?: pm.getInstalledApplications(PackageManager.GET_META_DATA).firstOrNull{
-   pm.getApplicationLabel(it).toString().contains(name,ignoreCase=true)
-  }
-  val intent=fuzzy?.packageName?.let{pm.getLaunchIntentForPackage(it)}
-  return if(intent!=null){
+  val launcherIntent=Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+  val apps=packageManager.queryIntentActivities(launcherIntent,PackageManager.MATCH_ALL)
+  val exact=apps.firstOrNull{it.loadLabel(packageManager).toString().equals(name,ignoreCase=true)}
+  val fuzzy=exact ?: apps.firstOrNull{it.loadLabel(packageManager).toString().contains(name,ignoreCase=true)}
+  val target=fuzzy?.activityInfo
+  return if(target!=null){
+   val intent=Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+    .setClassName(target.packageName,target.name).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
    runOnUiThread{startActivity(intent)}
-   "Opening "+pm.getApplicationLabel(fuzzy).toString()+"."
+   "Opening "+fuzzy.loadLabel(packageManager).toString()+"."
   }else "I couldn't find an installed application named $name."
  }
  private fun searchWeb(query:String):String{
