@@ -179,23 +179,40 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
    "Searching for $q."
   }catch(_:ActivityNotFoundException){"I couldn't open a browser."}
  }
+ private fun contactKey(value:String):String{
+  return value.lowercase(Locale.ROOT)
+   .replace(Regex("[^a-z0-9 ]")," ")
+   .replace("oo","u")
+   .replace("ou","u")
+   .replace(Regex("\\s+")," ")
+   .trim()
+ }
+ private fun contactMatches(spoken:String,name:String):Boolean{
+  val q=contactKey(spoken)
+  val full=contactKey(name)
+  if(q.isBlank()||full.isBlank())return false
+  if(full==q)return true
+  val qWords=q.split(" ").filter{it.isNotBlank()}
+  val nameWords=full.split(" ").filter{it.isNotBlank()}
+  return qWords.all{qWord->nameWords.any{nameWord->nameWord==qWord || nameWord.startsWith(qWord)}}
+ }
  private fun contactMatchScore(target:String):Int{
   val who=target.trim()
   if(who.isBlank())return 0
-  var exact=0
-  var partial=0
+  var score=0
   contentResolver.query(
    ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
-   arrayOf(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME),
-   ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME+" LIKE ?",
-   arrayOf("%$who%"),null
+   arrayOf(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME),null,null,null
   )?.use{cur->
    while(cur.moveToNext()){
     val name=cur.getString(0)?.trim().orEmpty()
-    if(name.equals(who,true))exact++ else partial++
+    if(contactMatches(who,name)){
+     val candidate=if(contactKey(name)==contactKey(who))1000 else 100
+     if(candidate>score)score=candidate
+    }
    }
   }
-  return exact*100+partial
+  return score
  }
  private fun callContactOrNumber(target:String):String{
   val who=target.trim()
@@ -206,13 +223,16 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
    val projection=arrayOf(ContactsContract.CommonDataKinds.Phone.NUMBER,ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
    val matches=mutableListOf<Pair<String,String>>()
    contentResolver.query(
-    ContactsContract.CommonDataKinds.Phone.CONTENT_URI,projection,
-    ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME+" LIKE ?",
-    arrayOf("%$who%"),ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME+" COLLATE NOCASE ASC"
+    ContactsContract.CommonDataKinds.Phone.CONTENT_URI,projection,null,null,
+    ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME+" COLLATE NOCASE ASC"
    )?.use{cur->
-    while(cur.moveToNext())matches.add(cur.getString(1).trim() to cur.getString(0))
+    while(cur.moveToNext()){
+     val name=cur.getString(1)?.trim().orEmpty()
+     val phone=cur.getString(0).orEmpty()
+     if(contactMatches(who,name))matches.add(name to phone)
+    }
    }
-   val unique=matches.distinctBy{it.first.lowercase(Locale.ROOT)}
+   val unique=matches.distinctBy{contactKey(it.first)}
    if(unique.size==1)number=unique.first().second
    else if(unique.size>1){
     runOnUiThread{
