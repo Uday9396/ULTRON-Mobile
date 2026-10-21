@@ -1,5 +1,6 @@
 name: Build ULTRON APK
 # ULTRON mobile APK build workflow
+# Rebuild trigger: 2026-10-21
 
 on:
   workflow_dispatch:
