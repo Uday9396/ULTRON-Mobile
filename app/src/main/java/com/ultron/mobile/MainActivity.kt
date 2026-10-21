@@ -2,6 +2,7 @@ package com.ultron.mobile
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
+import android.media.AudioManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.hardware.camera2.CameraCharacteristics
@@ -295,6 +296,14 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
   }
   return "I found ${choices.size} matching numbers for $who. Choose one on screen."
  }
+ private fun turnSpeakerOn():String{
+  return try{
+   val audio=getSystemService(Context.AUDIO_SERVICE) as AudioManager
+   @Suppress("DEPRECATION")
+   audio.isSpeakerphoneOn=true
+   "Speaker is on."
+  }catch(_:Exception){"I couldn't turn the speaker on."}
+ }
  private fun setAlarm(hour:Int,minute:Int,label:String="ULTRON"):String{
   return try{
    val i=Intent(AlarmClock.ACTION_SET_ALARM).putExtra(AlarmClock.EXTRA_HOUR,hour).putExtra(AlarmClock.EXTRA_MINUTES,minute).putExtra(AlarmClock.EXTRA_MESSAGE,label)
@@ -345,6 +354,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
   if(navTo!=null)return startNavigation(navTo.groupValues[1].trim())
   val call=Regex("(?i)^(?:(?:hey\\s+)?ultron[,:;.!?\\-]*\\s*)?(?:please\\s+)?(?:can\\s+you\\s+|could\\s+you\\s+|would\\s+you\\s+)?(?:call|dial|phone|ring)\\s+(?:my\\s+)?(.+?)[.!?]*$").matchEntire(t)
   if(call!=null)return callContactOrNumber(call.groupValues[1].trim())
+  val speaker=Regex("(?i)^(?:(?:hey\\s+)?ultron[,:;.!?\\-]*\\s*)?(?:please\\s+)?(?:(?:turn|switch)\\s+)?(?:the\\s+)?speaker(?:phone)?\\s+on[.!?]*$").matchEntire(t)
+  if(speaker!=null)return turnSpeakerOn()
   val timer=Regex("(?i)^(?:please\\s+)?(?:set\\s+)?(?:a\\s+)?timer\\s+(?:for\\s+)?(\\d+)\\s*(seconds?|secs?|minutes?|mins?|hours?|hrs?)$").matchEntire(t)
   if(timer!=null){
    val n=timer.groupValues[1].toInt()
