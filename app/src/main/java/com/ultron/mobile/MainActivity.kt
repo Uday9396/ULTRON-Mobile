@@ -214,53 +214,77 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
   }
   return score
  }
+ private fun placeDirectCall(number:String,label:String):String{
+  if(ContextCompat.checkSelfPermission(this,Manifest.permission.CALL_PHONE)!=PackageManager.PERMISSION_GRANTED){
+   ActivityCompat.requestPermissions(this,arrayOf(Manifest.permission.CALL_PHONE),43)
+   return "Allow Phone permission, then ask me to call $label again."
+  }
+  return try{
+   runOnUiThread{startActivity(Intent(Intent.ACTION_CALL,Uri.parse("tel:"+Uri.encode(number))))}
+   "Calling $label."
+  }catch(_:SecurityException){"Phone permission is required to place the call."}
+   catch(_:Exception){"I couldn't place the call."}
+ }
  private fun callContactOrNumber(target:String):String{
   val who=target.trim()
   if(who.isBlank())return "Tell me who to call."
   val digits=who.filter{it.isDigit() || it=='+'}
-  var number=if(digits.count{it.isDigit()}>=5)digits else ""
-  if(number.isBlank() && ContextCompat.checkSelfPermission(this,Manifest.permission.READ_CONTACTS)==PackageManager.PERMISSION_GRANTED){
-   val projection=arrayOf(ContactsContract.CommonDataKinds.Phone.NUMBER,ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
-   val matches=mutableListOf<Pair<String,String>>()
-   contentResolver.query(
-    ContactsContract.CommonDataKinds.Phone.CONTENT_URI,projection,null,null,
-    ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME+" COLLATE NOCASE ASC"
-   )?.use{cur->
-    while(cur.moveToNext()){
-     val name=cur.getString(1)?.trim().orEmpty()
-     val phone=cur.getString(0).orEmpty()
-     if(contactMatches(who,name))matches.add(name to phone)
+  if(digits.count{it.isDigit()}>=5)return placeDirectCall(digits,who)
+
+  if(ContextCompat.checkSelfPermission(this,Manifest.permission.READ_CONTACTS)!=PackageManager.PERMISSION_GRANTED){
+   ActivityCompat.requestPermissions(this,arrayOf(Manifest.permission.READ_CONTACTS),42)
+   return "Allow Contacts permission, then say call $who again."
+  }
+
+  data class CallChoice(val name:String,val number:String,val typeLabel:String)
+  val projection=arrayOf(
+   ContactsContract.CommonDataKinds.Phone.NUMBER,
+   ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+   ContactsContract.CommonDataKinds.Phone.TYPE,
+   ContactsContract.CommonDataKinds.Phone.LABEL
+  )
+  val matches=mutableListOf<CallChoice>()
+  contentResolver.query(
+   ContactsContract.CommonDataKinds.Phone.CONTENT_URI,projection,null,null,
+   ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME+" COLLATE NOCASE ASC"
+  )?.use{cur->
+   while(cur.moveToNext()){
+    val name=cur.getString(1)?.trim().orEmpty()
+    val phone=cur.getString(0)?.trim().orEmpty()
+    if(contactMatches(who,name) && phone.isNotBlank()){
+     val type=cur.getInt(2)
+     val custom=cur.getString(3)
+     val typeLabel=ContactsContract.CommonDataKinds.Phone.getTypeLabel(resources,type,custom).toString()
+     matches.add(CallChoice(name,phone,typeLabel))
     }
    }
-   val unique=matches.distinctBy{contactKey(it.first)}
-   if(unique.size==1)number=unique.first().second
-   else if(unique.size>1){
-    runOnUiThread{
-     val labels=unique.map{it.first}.toTypedArray()
-     androidx.appcompat.app.AlertDialog.Builder(this)
-      .setTitle("Choose contact")
-      .setItems(labels){_,which->
-       val selected=unique[which]
-       try{startActivity(Intent(Intent.ACTION_DIAL,Uri.parse("tel:"+Uri.encode(selected.second))))}
-       catch(_:Exception){}
-      }
-      .setNegativeButton("Cancel",null)
-      .show()
+  }
+
+  val unique=matches.distinctBy{
+   contactKey(it.name)+"|"+it.number.filter{ch->ch.isDigit() || ch=='+'}
+  }
+  if(unique.isEmpty())return "I couldn't find $who in your contacts."
+  if(unique.size==1){
+   val selected=unique.first()
+   return placeDirectCall(selected.number,selected.name)
+  }
+
+  runOnUiThread{
+   val labels=unique.map{
+    val suffix=if(it.typeLabel.isBlank())it.number else it.typeLabel+" — "+it.number
+    it.name+" — "+suffix
+   }.toTypedArray()
+   androidx.appcompat.app.AlertDialog.Builder(this)
+    .setTitle("Choose who to call")
+    .setItems(labels){_,which->
+     val selected=unique[which]
+     val result=placeDirectCall(selected.number,selected.name)
+     js("receiveUltron",result)
     }
-    return "I found ${unique.size} contacts matching $who. Choose the contact on screen."
-   }
+    .setNegativeButton("Cancel",null)
+    .show()
   }
-  if(number.isBlank()){
-   if(ContextCompat.checkSelfPermission(this,Manifest.permission.READ_CONTACTS)!=PackageManager.PERMISSION_GRANTED){
-    ActivityCompat.requestPermissions(this,arrayOf(Manifest.permission.READ_CONTACTS),42)
-    return "Allow Contacts permission, then say call $who again."
-   }
-   return "I couldn't find $who in your contacts."
-  }
-  return try{
-   runOnUiThread{startActivity(Intent(Intent.ACTION_DIAL,Uri.parse("tel:"+Uri.encode(number))))}
-   "Opening the dialer for $who."
-  }catch(_:Exception){"I couldn't open the dialer."}
+  return "I found ${unique.size} matching numbers for $who. Choose one on screen."
  }
  private fun setAlarm(hour:Int,minute:Int,label:String="ULTRON"):String{
   return try{
