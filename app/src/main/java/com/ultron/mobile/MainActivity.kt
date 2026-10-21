@@ -268,27 +268,32 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
    contactKey(it.name)+"|"+it.number.filter{ch->ch.isDigit() || ch=='+'}
   }
   if(unique.isEmpty())return "I couldn't find $who in your contacts."
-  if(unique.size==1){
-   val selected=unique.first()
+
+  // Exact normalized contact names always win over longer/fuzzy matches.
+  // Example: "call Roopa" calls "Roopa" directly even if "Roopa Amma" also exists.
+  val exact=unique.filter{contactKey(it.name)==contactKey(who)}
+  val choices=if(exact.isNotEmpty())exact else unique
+  if(choices.size==1){
+   val selected=choices.first()
    return placeDirectCall(selected.number,selected.name)
   }
 
   runOnUiThread{
-   val labels=unique.map{
+   val labels=choices.map{
     val suffix=if(it.typeLabel.isBlank())it.number else it.typeLabel+" — "+it.number
     it.name+" — "+suffix
    }.toTypedArray()
    androidx.appcompat.app.AlertDialog.Builder(this)
     .setTitle("Choose who to call")
     .setItems(labels){_,which->
-     val selected=unique[which]
+     val selected=choices[which]
      val result=placeDirectCall(selected.number,selected.name)
      js("receiveUltron",result)
     }
     .setNegativeButton("Cancel",null)
     .show()
   }
-  return "I found ${unique.size} matching numbers for $who. Choose one on screen."
+  return "I found ${choices.size} matching numbers for $who. Choose one on screen."
  }
  private fun setAlarm(hour:Int,minute:Int,label:String="ULTRON"):String{
   return try{
