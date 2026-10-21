@@ -182,6 +182,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
  private fun contactKey(value:String):String{
   return value.lowercase(Locale.ROOT)
    .replace(Regex("[^a-z0-9 ]")," ")
+   // Normalize common speech-recognition vowel spellings in names.
+   // Example: Roopa / Rupa / Roupa all become the same comparison key.
+   .replace(Regex("(?<=^|\\s)rou(?=[a-z])"),"ru")
+   .replace(Regex("(?<=^|\\s)roo(?=[a-z])"),"ru")
    .replace("oo","u")
    .replace("ou","u")
    .replace(Regex("\\s+")," ")
