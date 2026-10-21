@@ -44,4 +44,4 @@ jobs:
           path: ULTRON-Mobile.apk
           if-no-files-found: error
 
-# Actions trigger: Roopa speech-match build 2026-10-21
+# Actions trigger: force fresh APK build 2026-10-21 20:19 IST
