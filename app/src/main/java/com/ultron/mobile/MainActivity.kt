@@ -75,34 +75,51 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
    .setStyle(NotificationCompat.BigTextStyle().bigText(body)).setPriority(NotificationCompat.PRIORITY_HIGH).setAutoCancel(true).build()
   (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).notify(id.hashCode(),n)
  }
+ private fun fetchMasterAlerts(base:String):org.json.JSONArray?{
+  return try{
+   val conn=URL(base.trimEnd('/')+"/api/messages").openConnection() as HttpURLConnection
+   conn.connectTimeout=3000;conn.readTimeout=5000
+   val token=prefs.getString("token","")?.trim().orEmpty()
+   if(token.isNotBlank())conn.setRequestProperty("X-ULTRON-APP-TOKEN",token)
+   val code=conn.responseCode
+   val raw=if(code in 200..299)conn.inputStream.bufferedReader().use{it.readText()} else ""
+   conn.disconnect()
+   if(code in 200..299)JSONObject(raw).optJSONArray("messages") else null
+  }catch(_:Exception){null}
+ }
  private fun startMasterAlerts(){
   thread(isDaemon=true){
    while(!isFinishing){
     try{
-     val base=prefs.getString("base",defaultPcBase)?.trim()?.trimEnd('/').orEmpty()
-     val conn=URL(base+"/api/messages").openConnection() as HttpURLConnection
-     conn.connectTimeout=3000;conn.readTimeout=5000
-     if(conn.responseCode in 200..299){
-      val arr=JSONObject(conn.inputStream.bufferedReader().use{it.readText()}).optJSONArray("messages")
+     var base=prefs.getString("base",defaultPcBase)?.trim()?.trimEnd('/').orEmpty()
+     var arr=fetchMasterAlerts(base)
+     if(arr==null){
+      val discovered=discoverCore()
+      if(discovered!=null){base=discovered;arr=fetchMasterAlerts(base)}
+     }
+     if(arr!=null){
       val last=prefs.getString("last_master_alert_id","").orEmpty()
       var newest=last
-      if(arr!=null){
-       var passed=last.isBlank()
-       for(i in 0 until arr.length()){
-        val item=arr.optJSONObject(i)?:continue
-        val id=item.optString("id")
-        if(!passed){if(id==last)passed=true;continue}
-        if(id.isBlank()||id==last)continue
-        if(last.isNotBlank())showMasterAlert(id,item.optString("author","Discord user"),item.optString("content"),item.optString("guild_name","Discord")+" - "+item.optString("channel_name","Direct Message"),item.optString("created_at"))
-        newest=id
-       }
-       if(last.isBlank()&&arr.length()>0)newest=arr.optJSONObject(arr.length()-1)?.optString("id").orEmpty()
-       if(newest.isNotBlank())prefs.edit().putString("last_master_alert_id",newest).apply()
+      var lastFound=last.isBlank()
+      if(last.isNotBlank()){
+       for(i in 0 until arr.length())if(arr.optJSONObject(i)?.optString("id")==last){lastFound=true;break}
       }
+      for(i in 0 until arr.length()){
+       val item=arr.optJSONObject(i)?:continue
+       val id=item.optString("id")
+       if(id.isBlank())continue
+       if(last.isNotBlank() && lastFound){
+        if(id==last){lastFound=false;continue}
+        if(lastFound)continue
+       }
+       if(id==last)continue
+       showMasterAlert(id,item.optString("author","Discord user"),item.optString("content"),item.optString("guild_name","Discord")+" - "+item.optString("channel_name","Direct Message"),item.optString("created_at"))
+       newest=id
+      }
+      if(newest.isNotBlank())prefs.edit().putString("last_master_alert_id",newest).apply()
      }
-     conn.disconnect()
     }catch(_:Exception){}
-    try{Thread.sleep(5000)}catch(_:InterruptedException){return@thread}
+    try{Thread.sleep(4000)}catch(_:InterruptedException){return@thread}
    }
   }
  }
