@@ -2,6 +2,10 @@ package com.ultron.mobile
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.os.Build
+import androidx.core.app.NotificationCompat
 import android.media.AudioManager
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -46,9 +50,62 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
    override fun onDone(id:String?){if(id=="ultron_home_voice")js("homeVoiceDone","")}
    @Deprecated("Deprecated in Java") override fun onError(id:String?){if(id=="ultron_home_voice")js("homeVoiceDone","")}
   })
+  createAlertChannel()
+  requestAlertPermission()
+  startMasterAlerts()
   web=WebView(this).apply { setBackgroundColor(android.graphics.Color.BLACK); settings.javaScriptEnabled=true; settings.domStorageEnabled=true; webViewClient=WebViewClient(); webChromeClient=WebChromeClient(); addJavascriptInterface(Bridge(),"UltronAndroid"); loadUrl("file:///android_asset/ultron.html") }; setContentView(web)
  }
  private fun js(fn:String,v:String){ val q=JSONObject.quote(v); runOnUiThread{web.evaluateJavascript("$fn($q)",null)} }
+ private fun createAlertChannel(){
+  if(Build.VERSION.SDK_INT>=Build.VERSION_CODES.O){
+   (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).createNotificationChannel(
+    NotificationChannel("ultron_master_alerts","ULTRON Master Alerts",NotificationManager.IMPORTANCE_HIGH)
+   )
+  }
+ }
+ private fun requestAlertPermission(){
+  if(Build.VERSION.SDK_INT>=33 && ContextCompat.checkSelfPermission(this,Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)
+   ActivityCompat.requestPermissions(this,arrayOf(Manifest.permission.POST_NOTIFICATIONS),44)
+ }
+ private fun showMasterAlert(id:String,author:String,content:String,where:String,created:String){
+  if(Build.VERSION.SDK_INT>=33 && ContextCompat.checkSelfPermission(this,Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)return
+  val body="$author: $content\n$where\n$created"
+  val n=NotificationCompat.Builder(this,"ultron_master_alerts").setSmallIcon(R.mipmap.ic_launcher)
+   .setContentTitle("ULTRON - Master Requested").setContentText("$author: $content")
+   .setStyle(NotificationCompat.BigTextStyle().bigText(body)).setPriority(NotificationCompat.PRIORITY_HIGH).setAutoCancel(true).build()
+  (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).notify(id.hashCode(),n)
+ }
+ private fun startMasterAlerts(){
+  thread(isDaemon=true){
+   while(!isFinishing){
+    try{
+     val base=prefs.getString("base",defaultPcBase)?.trim()?.trimEnd('/').orEmpty()
+     val conn=URL(base+"/api/messages").openConnection() as HttpURLConnection
+     conn.connectTimeout=3000;conn.readTimeout=5000
+     if(conn.responseCode in 200..299){
+      val arr=JSONObject(conn.inputStream.bufferedReader().use{it.readText()}).optJSONArray("messages")
+      val last=prefs.getString("last_master_alert_id","").orEmpty()
+      var newest=last
+      if(arr!=null){
+       var passed=last.isBlank()
+       for(i in 0 until arr.length()){
+        val item=arr.optJSONObject(i)?:continue
+        val id=item.optString("id")
+        if(!passed){if(id==last)passed=true;continue}
+        if(id.isBlank()||id==last)continue
+        if(last.isNotBlank())showMasterAlert(id,item.optString("author","Discord user"),item.optString("content"),item.optString("guild_name","Discord")+" - "+item.optString("channel_name","Direct Message"),item.optString("created_at"))
+        newest=id
+       }
+       if(last.isBlank()&&arr.length()>0)newest=arr.optJSONObject(arr.length()-1)?.optString("id").orEmpty()
+       if(newest.isNotBlank())prefs.edit().putString("last_master_alert_id",newest).apply()
+      }
+     }
+     conn.disconnect()
+    }catch(_:Exception){}
+    try{Thread.sleep(5000)}catch(_:InterruptedException){return@thread}
+   }
+  }
+ }
  private fun tryChat(base:String,token:String,message:String):String?{
   return try{
    val c=URL("${base.trimEnd('/')}/api/chat").openConnection() as HttpURLConnection
