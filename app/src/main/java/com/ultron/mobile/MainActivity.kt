@@ -146,7 +146,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
   val left200=200-used
   val left156=156-used
   fun remaining(value:Int,limit:Int)=if(value>=0)"$value units left out of $limit" else "${-value} units over $limit"
-  return "Previous reading: $previous. Present reading: $present. Units used: $used. ${remaining(left200,200)}. ${remaining(left156,156)}."
+  return "Previous reading: $previous\nPresent reading: $present\nUnits used: $used\n${remaining(left200,200)}\n${remaining(left156,156)}"
  }
  private fun callMaster():String{
   for(name in listOf("Uday","Uday Kiran","Master")){
