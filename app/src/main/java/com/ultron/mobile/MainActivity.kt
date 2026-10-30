@@ -56,6 +56,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
   createAlertChannel()
   requestAlertPermission()
   startMasterAlerts()
+  scheduleMasterAlertChecks()
   scheduleBescomReminder()
   web=WebView(this).apply { setBackgroundColor(android.graphics.Color.BLACK); settings.javaScriptEnabled=true; settings.domStorageEnabled=true; webViewClient=WebViewClient(); webChromeClient=WebChromeClient(); addJavascriptInterface(Bridge(),"UltronAndroid"); loadUrl("file:///android_asset/ultron.html") }; setContentView(web)
  }
@@ -126,6 +127,11 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     try{Thread.sleep(4000)}catch(_:InterruptedException){return@thread}
    }
   }
+ }
+ private fun scheduleMasterAlertChecks(){
+  val alarm=getSystemService(Context.ALARM_SERVICE) as AlarmManager
+  val pending=PendingIntent.getBroadcast(this,4404,Intent(this,MasterAlertReceiver::class.java),PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+  alarm.setInexactRepeating(AlarmManager.ELAPSED_REALTIME_WAKEUP,android.os.SystemClock.elapsedRealtime()+60_000L,60_000L,pending)
  }
  private fun scheduleBescomReminder(){
   val alarm=getSystemService(Context.ALARM_SERVICE) as AlarmManager
@@ -561,6 +567,51 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
   }
  }
  override fun onDestroy(){recognizer?.destroy();tts?.stop();tts?.shutdown();if(torchOn){try{toggleTorch()}catch(_:Exception){}};web.destroy();super.onDestroy()}
+}
+class MasterAlertReceiver:BroadcastReceiver(){
+ override fun onReceive(context:Context,intent:Intent?){
+  kotlin.concurrent.thread{
+   try{
+    val prefs=context.getSharedPreferences("ultron_mobile",Context.MODE_PRIVATE)
+    val base=prefs.getString("base","http://192.168.0.108:5000")?.trim()?.trimEnd('/').orEmpty()
+    val conn=URL(base+"/api/messages").openConnection() as HttpURLConnection
+    conn.connectTimeout=4000;conn.readTimeout=5000
+    val token=prefs.getString("token","")?.trim().orEmpty()
+    if(token.isNotBlank())conn.setRequestProperty("X-ULTRON-APP-TOKEN",token)
+    val raw=if(conn.responseCode in 200..299)conn.inputStream.bufferedReader().use{it.readText()} else ""
+    conn.disconnect()
+    if(raw.isBlank())return@thread
+    val arr=JSONObject(raw).optJSONArray("messages")?:return@thread
+    val last=prefs.getString("last_master_alert_id","").orEmpty()
+    var newest=last
+    var passed=last.isBlank()
+    if(last.isNotBlank()){
+     var found=false
+     for(i in 0 until arr.length())if(arr.optJSONObject(i)?.optString("id")==last){found=true;break}
+     if(!found)passed=true
+    }
+    val nm=context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    if(Build.VERSION.SDK_INT>=Build.VERSION_CODES.O)nm.createNotificationChannel(NotificationChannel("ultron_master_alerts","ULTRON Master Alerts",NotificationManager.IMPORTANCE_HIGH))
+    for(i in 0 until arr.length()){
+     val item=arr.optJSONObject(i)?:continue
+     val id=item.optString("id");if(id.isBlank())continue
+     if(!passed){if(id==last)passed=true;continue}
+     if(id==last)continue
+     if(Build.VERSION.SDK_INT<33 || ContextCompat.checkSelfPermission(context,Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED){
+      val author=item.optString("author","Discord user")
+      val content=item.optString("content")
+      val where=item.optString("guild_name","Discord")+" - "+item.optString("channel_name","Direct Message")
+      val created=item.optString("created_at")
+      val body="$author: $content\n$where\n$created"
+      val n=NotificationCompat.Builder(context,"ultron_master_alerts").setSmallIcon(R.mipmap.ic_launcher).setContentTitle("ULTRON - Master Requested").setContentText("$author: $content").setStyle(NotificationCompat.BigTextStyle().bigText(body)).setPriority(NotificationCompat.PRIORITY_HIGH).setAutoCancel(true).build()
+      nm.notify(id.hashCode(),n)
+     }
+     newest=id
+    }
+    if(newest.isNotBlank())prefs.edit().putString("last_master_alert_id",newest).apply()
+   }catch(_:Exception){}
+  }
+ }
 }
 class BescomReminderReceiver:BroadcastReceiver(){
  override fun onReceive(context:Context,intent:Intent?){
