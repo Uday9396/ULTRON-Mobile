@@ -18,7 +18,7 @@
 </section>
 <script>
 let waiting=false,ttsOn=true,homeVoice=false;
-function addMessage(name,text,type=""){const c=document.getElementById("chat"),p=document.createElement("p"),s=document.createElement("strong");s.className=name==="ULTRON"?"ultron-name":"user-name";s.textContent=name+": ";p.appendChild(s);p.appendChild(document.createTextNode(text));if(type)p.classList.add(type);c.appendChild(p);c.scrollTop=c.scrollHeight;return p}
+function addMessage(name,text,type=""){const c=document.getElementById("chat"),p=document.createElement("p"),s=document.createElement("strong");s.className=name==="ULTRON"?"ultron-name":"user-name";s.textContent=name+": ";p.appendChild(s);const lines=String(text).split("\\n");lines.forEach((line,i)=>{if(i)p.appendChild(document.createElement("br"));const important=/^(Units used:|.*units (?:left out of|over) (?:200|156))/i.test(line.trim());if(important){const v=document.createElement("strong");v.textContent=line;v.style.fontSize="1.35em";v.style.fontWeight="800";p.appendChild(v)}else p.appendChild(document.createTextNode(line))});if(type)p.classList.add(type);c.appendChild(p);c.scrollTop=c.scrollHeight;return p}
 function openChat(){document.getElementById("home").style.display="none";document.getElementById("chatScreen").classList.add("open");setTimeout(()=>document.getElementById("chatMessage").focus(),80)}
 function closeChat(){document.getElementById("chatScreen").classList.remove("open");document.getElementById("home").style.display="flex"}
 function sendCore(m){m=(m||"").trim();if(!m||waiting)return;openChat();addMessage("YOU",m);waiting=true;const p=addMessage("ULTRON","Analyzing...","thinking");p.id="thinking";UltronAndroid.sendMessage(m)}
