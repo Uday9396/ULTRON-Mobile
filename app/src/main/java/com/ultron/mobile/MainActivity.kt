@@ -4,6 +4,9 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.AlarmManager
+import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import android.media.AudioManager
@@ -53,6 +56,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
   createAlertChannel()
   requestAlertPermission()
   startMasterAlerts()
+  scheduleBescomReminder()
   web=WebView(this).apply { setBackgroundColor(android.graphics.Color.BLACK); settings.javaScriptEnabled=true; settings.domStorageEnabled=true; webViewClient=WebViewClient(); webChromeClient=WebChromeClient(); addJavascriptInterface(Bridge(),"UltronAndroid"); loadUrl("file:///android_asset/ultron.html") }; setContentView(web)
  }
  private fun js(fn:String,v:String){ val q=JSONObject.quote(v); runOnUiThread{web.evaluateJavascript("$fn($q)",null)} }
@@ -122,6 +126,33 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     try{Thread.sleep(4000)}catch(_:InterruptedException){return@thread}
    }
   }
+ }
+ private fun scheduleBescomReminder(){
+  val alarm=getSystemService(Context.ALARM_SERVICE) as AlarmManager
+  val pending=PendingIntent.getBroadcast(this,6006,Intent(this,BescomReminderReceiver::class.java),PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+  val now=java.util.Calendar.getInstance()
+  val next=java.util.Calendar.getInstance().apply{set(java.util.Calendar.DAY_OF_MONTH,6);set(java.util.Calendar.HOUR_OF_DAY,9);set(java.util.Calendar.MINUTE,0);set(java.util.Calendar.SECOND,0);set(java.util.Calendar.MILLISECOND,0);if(!after(now))add(java.util.Calendar.MONTH,1)}
+  alarm.setInexactRepeating(AlarmManager.RTC_WAKEUP,next.timeInMillis,AlarmManager.INTERVAL_DAY*30,pending)
+ }
+ private fun updatePreviousReading(value:Int):String{
+  prefs.edit().putInt("bescom_previous_reading",value).apply()
+  return "BESCOM previous reading updated to $value units."
+ }
+ private fun calculateElectricity(present:Int):String{
+  if(!prefs.contains("bescom_previous_reading"))return "No BESCOM previous reading is saved yet. Tell me the previous reading from the latest bill first."
+  val previous=prefs.getInt("bescom_previous_reading",0)
+  if(present<previous)return "Present reading cannot be lower than the saved previous reading of $previous."
+  val used=present-previous
+  val left200=200-used
+  val left156=156-used
+  fun remaining(value:Int,limit:Int)=if(value>=0)"$value units left out of $limit" else "${-value} units over $limit"
+  return "Previous reading: $previous. Present reading: $present. Units used: $used. ${remaining(left200,200)}. ${remaining(left156,156)}."
+ }
+ private fun callMaster():String{
+  for(name in listOf("Uday","Uday Kiran","Master")){
+   if(ContextCompat.checkSelfPermission(this,Manifest.permission.READ_CONTACTS)==PackageManager.PERMISSION_GRANTED && contactMatchScore(name)>0)return callContactOrNumber(name)
+  }
+  return callContactOrNumber("Uday")
  }
  private fun tryChat(base:String,token:String,message:String):String?{
   return try{
@@ -418,6 +449,12 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
  }
  private fun tryLocalCommand(message:String):String?{
   val t=message.trim()
+  val previousReading=Regex("(?i)^(?:(?:hey\\s+)?ultron[,:;.!?\\-]*\\s*)?(?:please\\s+)?(?:update|set|save|change)?\\s*(?:the\\s+)?(?:bescom\\s+)?previous\\s+(?:meter\\s+)?reading\\s*(?:to|is|as)?\\s*(\\d+)[.!?]*$").matchEntire(t)
+  if(previousReading!=null)return updatePreviousReading(previousReading.groupValues[1].toInt())
+  val presentReading=Regex("(?i)^(?:(?:hey\\s+)?ultron[,:;.!?\\-]*\\s*)?(?:please\\s+)?(?:the\\s+)?(?:bescom\\s+)?(?:present|current)\\s+(?:meter\\s+)?reading\\s*(?:is|of|=)?\\s*(\\d+)[.!?]*$").matchEntire(t)
+  if(presentReading!=null)return calculateElectricity(presentReading.groupValues[1].toInt())
+  val masterCall=Regex("(?i)^(?:(?:hey\\s+)?ultron[,:;.!?\\-]*\\s*)?(?:please\\s+)?(?:call|dial|phone|ring)\\s+(?:your|my|the)\\s+master[.!?]*$").matchEntire(t)
+  if(masterCall!=null)return callMaster()
   val route=Regex("(?i)^(?:(?:hey\\s+)?ultron[,:;.!?\\-]*\\s*)?(?:please\\s+)?(?:(?:start|begin)\\s+)?(?:navigation|navigate|directions?)\\s+from\\s+(.+?)\\s+to\\s+(.+?)[.!?]*$").matchEntire(t)
   if(route!=null){
    val origin=route.groupValues[1].trim()
@@ -524,4 +561,13 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
   }
  }
  override fun onDestroy(){recognizer?.destroy();tts?.stop();tts?.shutdown();if(torchOn){try{toggleTorch()}catch(_:Exception){}};web.destroy();super.onDestroy()}
+}
+class BescomReminderReceiver:BroadcastReceiver(){
+ override fun onReceive(context:Context,intent:Intent?){
+  val manager=context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+  if(Build.VERSION.SDK_INT>=Build.VERSION_CODES.O)manager.createNotificationChannel(NotificationChannel("ultron_bescom","ULTRON BESCOM Reminders",NotificationManager.IMPORTANCE_HIGH))
+  if(Build.VERSION.SDK_INT>=33 && ContextCompat.checkSelfPermission(context,Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)return
+  val n=NotificationCompat.Builder(context,"ultron_bescom").setSmallIcon(R.mipmap.ic_launcher).setContentTitle("ULTRON - BESCOM Reminder").setContentText("Update the previous meter reading from the monthly BESCOM bill.").setPriority(NotificationCompat.PRIORITY_HIGH).setAutoCancel(true).build()
+  manager.notify(6006,n)
+ }
 }
