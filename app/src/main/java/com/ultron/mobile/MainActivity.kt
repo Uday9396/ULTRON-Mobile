@@ -522,6 +522,53 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
   @JavascriptInterface fun stopSpeaking()=runOnUiThread{tts?.stop()}
   @JavascriptInterface fun saveConnection(base:String,token:String){prefs.edit().putString("base",base.trim().trimEnd('/')).putString("token",token.trim()).apply();js("connectionState","SAVED")}
   @JavascriptInterface fun getBaseUrl():String=prefs.getString("base",defaultPcBase)?:defaultPcBase
+
+  @JavascriptInterface fun pairDevice(base:String,code:String,deviceName:String){
+   thread{
+    try{
+     val cleanBase=base.trim().trimEnd('/')
+     if(!cleanBase.startsWith("https://",true)){
+      js("pairingState","Pairing requires an HTTPS address. Ordinary HTTP is blocked for security.")
+      return@thread
+     }
+     if(code.isBlank() || deviceName.isBlank()){
+      js("pairingState","Enter the pairing code and a device name.")
+      return@thread
+     }
+     val deviceId="android-"+java.util.UUID.randomUUID().toString().replace("-","")
+     val model=(Build.MANUFACTURER+" "+Build.MODEL).take(120)
+     val payload=JSONObject()
+      .put("pairing_code",code.trim())
+      .put("device_id",deviceId)
+      .put("name",deviceName.trim().take(80))
+      .put("platform","android")
+      .put("model",model)
+      .put("permissions",org.json.JSONArray().put("status"))
+     val conn=URL(cleanBase+"/api/devices/pair").openConnection() as HttpURLConnection
+     conn.requestMethod="POST"
+     conn.connectTimeout=8000
+     conn.readTimeout=12000
+     conn.doOutput=true
+     conn.setRequestProperty("Content-Type","application/json")
+     conn.outputStream.use{it.write(payload.toString().toByteArray(Charsets.UTF_8))}
+     val status=conn.responseCode
+     val stream=if(status in 200..299)conn.inputStream else conn.errorStream
+     val raw=stream?.bufferedReader()?.use{it.readText()}.orEmpty()
+     conn.disconnect()
+     val response=if(raw.isBlank())JSONObject() else JSONObject(raw)
+     if(status in 200..299 && response.optBoolean("ok")){
+      val deviceToken=response.optString("device_token")
+      if(deviceToken.isBlank())throw IllegalStateException("The server did not return a device token.")
+      prefs.edit().putString("paired_device_id",deviceId).putString("paired_device_token",deviceToken).putString("paired_device_name",deviceName.trim()).apply()
+      js("pairingState","CONNECTED • "+deviceName.trim()+" (status permission paired)")
+     }else{
+      js("pairingState",response.optString("error","Pairing failed. Check the code and HTTPS address."))
+     }
+    }catch(e:Exception){
+     js("pairingState","Could not connect: "+(e.message?: "network error"))
+    }
+   }
+  }
   @JavascriptInterface fun sendHomeVoiceMessage(message:String){
    val local=tryLocalCommand(message)
    if(local!=null){js("homeVoiceReply",local);return}
