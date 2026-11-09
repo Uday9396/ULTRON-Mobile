@@ -558,7 +558,16 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
    runOnUiThread{tts?.setPitch(0.72f);tts?.setSpeechRate(0.92f);tts?.speak(text,TextToSpeech.QUEUE_FLUSH,null,"ultron_reply")}
   }
   @JavascriptInterface fun stopSpeaking()=runOnUiThread{tts?.stop()}
-  @JavascriptInterface fun saveConnection(base:String,token:String){prefs.edit().putString("base",base.trim().trimEnd('/')).putString("token",token.trim()).apply();js("connectionState","SAVED")}
+  @JavascriptInterface fun saveConnection(base:String,token:String){
+   val cleanBase=base.trim().trimEnd('/')
+   prefs.edit().putString("base",cleanBase).putString("token",token.trim()).apply()
+   val deviceId=prefs.getString("paired_device_id","").orEmpty()
+   val deviceToken=prefs.getString("paired_device_token","").orEmpty()
+   if(cleanBase.startsWith("https://",true) && deviceId.isNotBlank() && deviceToken.isNotBlank()){
+    startDeviceHeartbeat(cleanBase,deviceId,deviceToken)
+   }
+   js("connectionState","SAVED")
+  }
   @JavascriptInterface fun getBaseUrl():String=prefs.getString("base",defaultPcBase)?:defaultPcBase
 
   @JavascriptInterface fun pairDevice(base:String,code:String,deviceName:String){
