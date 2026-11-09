@@ -44,6 +44,44 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
  private var torchOn = false
  private val prefs by lazy { getSharedPreferences("ultron_mobile", Context.MODE_PRIVATE) }
  private val defaultPcBase = "http://192.168.0.108:5000"
+ private val heartbeatExecutor = Executors.newSingleThreadScheduledExecutor()
+ @Volatile private var heartbeatTask: java.util.concurrent.ScheduledFuture<*>? = null
+
+ private fun startDeviceHeartbeat(base:String,deviceId:String,deviceToken:String){
+  heartbeatTask?.cancel(true)
+  val cleanBase=base.trim().trimEnd('/')
+  heartbeatTask=heartbeatExecutor.scheduleAtFixedRate({
+   var conn:HttpURLConnection?=null
+   try{
+    conn=URL(cleanBase+"/api/devices/"+deviceId+"/heartbeat").openConnection() as HttpURLConnection
+    conn.requestMethod="POST"
+    conn.connectTimeout=8000
+    conn.readTimeout=8000
+    conn.setRequestProperty("Authorization","Bearer "+deviceToken)
+    conn.setRequestProperty("Accept","application/json")
+    val status=conn.responseCode
+    val stream=if(status in 200..299)conn.inputStream else conn.errorStream
+    val raw=stream?.bufferedReader()?.use{it.readText()}.orEmpty()
+    val response=if(raw.isBlank())JSONObject() else JSONObject(raw)
+    if(status in 200..299 && response.optBoolean("ok")){
+     js("pairingState","ONLINE • "+prefs.getString("paired_device_name","This phone").orEmpty()+" (status only)")
+    }else{
+     js("pairingState","PAIRED • heartbeat rejected ("+status+")")
+    }
+   }catch(_:Exception){
+    js("pairingState","PAIRED • waiting for laptop connection")
+   }finally{conn?.disconnect()}
+  },0,25,TimeUnit.SECONDS)
+ }
+
+ private fun resumeSavedDeviceHeartbeat(){
+  val deviceId=prefs.getString("paired_device_id","").orEmpty()
+  val deviceToken=prefs.getString("paired_device_token","").orEmpty()
+  val base=prefs.getString("base",defaultPcBase).orEmpty()
+  if(deviceId.isNotBlank() && deviceToken.isNotBlank() && base.startsWith("https://",true)){
+   startDeviceHeartbeat(base,deviceId,deviceToken)
+  }
+ }
 
  @SuppressLint("SetJavaScriptEnabled")
  override fun onCreate(b: Bundle?) { super.onCreate(b)
@@ -58,7 +96,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
   startMasterAlerts()
   scheduleMasterAlertChecks()
   scheduleBescomReminder()
-  web=WebView(this).apply { setBackgroundColor(android.graphics.Color.BLACK); settings.javaScriptEnabled=true; settings.domStorageEnabled=true; webViewClient=WebViewClient(); webChromeClient=WebChromeClient(); addJavascriptInterface(Bridge(),"UltronAndroid"); loadUrl("file:///android_asset/ultron.html") }; setContentView(web)
+  web=WebView(this).apply { setBackgroundColor(android.graphics.Color.BLACK); settings.javaScriptEnabled=true; settings.domStorageEnabled=true; webViewClient=WebViewClient(); webChromeClient=WebChromeClient(); addJavascriptInterface(Bridge(),"UltronAndroid"); loadUrl("file:///android_asset/ultron.html") }; setContentView(web); resumeSavedDeviceHeartbeat()
  }
  private fun js(fn:String,v:String){ val q=JSONObject.quote(v); runOnUiThread{web.evaluateJavascript("$fn($q)",null)} }
  private fun createAlertChannel(){
@@ -559,8 +597,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
      if(status in 200..299 && response.optBoolean("ok")){
       val deviceToken=response.optString("device_token")
       if(deviceToken.isBlank())throw IllegalStateException("The server did not return a device token.")
-      prefs.edit().putString("paired_device_id",deviceId).putString("paired_device_token",deviceToken).putString("paired_device_name",deviceName.trim()).apply()
-      js("pairingState","CONNECTED • "+deviceName.trim()+" (status permission paired)")
+      prefs.edit().putString("base",cleanBase).putString("paired_device_id",deviceId).putString("paired_device_token",deviceToken).putString("paired_device_name",deviceName.trim()).apply()
+      js("pairingState","PAIRING COMPLETE • checking live connection...")
+      startDeviceHeartbeat(cleanBase,deviceId,deviceToken)
      }else{
       js("pairingState",response.optString("error","Pairing failed. Check the code and HTTPS address."))
      }
@@ -613,7 +652,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
    tts?.setSpeechRate(0.92f)
   }
  }
- override fun onDestroy(){recognizer?.destroy();tts?.stop();tts?.shutdown();if(torchOn){try{toggleTorch()}catch(_:Exception){}};web.destroy();super.onDestroy()}
+ override fun onDestroy(){heartbeatTask?.cancel(true);heartbeatExecutor.shutdownNow();recognizer?.destroy();tts?.stop();tts?.shutdown();if(torchOn){try{toggleTorch()}catch(_:Exception){}};web.destroy();super.onDestroy()}
 }
 class MasterAlertReceiver:BroadcastReceiver(){
  override fun onReceive(context:Context,intent:Intent?){
